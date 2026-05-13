@@ -3,7 +3,7 @@
     "path": "C:/Users/Joe/pkgs/depmicrosimr/README.Rmd",
     "project_path": "README.Rmd",
     "type": "r_markdown",
-    "hash": "0",
+    "hash": "1086900967",
     "contents": "",
     "dirty": false,
     "created": 1778674429146.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "36,21",
-        "scrollLine": "32"
+        "cursorPosition": "46,27",
+        "scrollLine": "34"
     },
     "folds": "",
-    "lastKnownWriteTime": 1778672109,
+    "lastKnownWriteTime": 1778684947,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1778672109,
+    "last_content_update": 1778684947158,
     "read_only": false,
     "read_only_alternatives": []
 }
