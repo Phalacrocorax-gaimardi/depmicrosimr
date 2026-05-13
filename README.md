@@ -7,15 +7,15 @@
 
 <!-- badges: end -->
 
-Dynamic electricity pricing (DEP) is thought to be a useful tool to
-increase flexibility in power systems. Flexibility means a near a
-real-time system balancing effect that reduces renewables curtailment,
-enhances peak-shaving, reduces the need for storage etc. DEP is a
-win-win that can produce financial gains at both system and the
-individual household level. *depmicrosimr* is an agent-based model
-designed to (1) project the uptake of dynamic electricity tariffs on
-Irish consumers and (2) investigate the consequences for the power
-system.
+Dynamic electricity pricing (DEP) is a policy and regulatory tool to
+increase flexibility in power systems. The objective is to produce a
+near real-time system balancing effect. This enhances peak-shaving,
+lowers renewables curtailment, reduces storage requirements etc. DEP is
+a win-win because it has the potential to produce financial gains at
+both system and the individual household level. *depmicrosimr* is an
+agent-based model designed to (1) project the uptake of dynamic
+electricity tariffs on Irish consumers and (2) investigate consequences
+for the power system.
 
 ## Installation
 
