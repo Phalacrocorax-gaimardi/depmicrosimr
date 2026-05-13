@@ -1,0 +1,134 @@
+# Copyright 2026 University College Dublin
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+#sem_prices_2023_2025 <- hourly_2023_2025
+#sem_prices_2023_2025 <- tibble(sem_prices_2023_2025) %>% select(-Price)
+#use_data(sem_prices_2023_2025,overwrite = T)
+#load_profiles <- lp
+#use_data(load_profiles,overwrite=T)
+
+
+
+
+#' make_demand_response_data
+#'
+#' @param profile load index column name from load_profiles
+#' @param mean_daily_load mean daily load
+#' @param years year(s) of price data, from sem_prices_2023_2025
+#'
+#' @returns dataframe of hourly data for year. load in kWh, price in euro/kWh
+#' @export
+#'
+#' @examples
+#' #make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
+
+make_demand_response_data <- function(profile="lp1",mean_daily_load=20, years=2023:2025){
+
+  load <- load_profiles %>% dplyr::select(datetime,any_of(profile))
+  load <- load %>% dplyr::rename("load"=profile) %>% dplyr::mutate(load=mean_daily_load*365*load)
+
+  load_e<- lapply(years, function(y) {load %>% dplyr::mutate(datetime=update(datetime,year = y))}) %>% dplyr::bind_rows()
+
+  sem_prices_2023_2025 %>% dplyr::mutate(price=price/1000) %>% dplyr::inner_join(load_e)
+
+  }
+
+
+#' get_flex
+#'
+#' get_flex solves for the flexible load \eqn{L_t} that optimises the cost to a household over the period 1:T. With flat price,
+#' the household load is \eqn{L_t^0}. In addition, to
+#' the financial cost that depends on the prices \eqn{p(t)}
+#' the t with a kinetic regularisation term. The model is
+#' \deqn{C = \sum_{t=1}^T p_t L_t + \eta \sum_t (L_{t+1}-L_t)^2 + \gamma_t \sum_t \sum_k \exp(-|k|/\tau) \left(L_{t+k}-L_{t+k}\right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
+#' The constraint \eqn{\sum(L_t)=\sum(L_t^0)} is imposed i.e. total household energy consumption is inelastic.
+#' \cr
+#'
+#'
+#'
+#' @param demand a 3 column dataframe of datetime, hourly prices and natural_load
+#' @param phi baseload (inflexible) fraction of load
+#' @param tau flexibility time horizon in hours
+#' @param gamma the quandatric cost penalty weight
+#' @param eta weight of the kinetic term (regularisation)
+#' @param P_max the maximum permitted load
+#' @param precision desired solver precision
+#'
+#' @returns a 2-column dataframe of datetime and perturbed load
+#' @export
+#'
+#' @examples
+#'
+#'
+get_flex <- function(demand, phi = 0.5, tau = 24, gamma = 0.5, eta = 1.0, P_max = 10,precision=1e-6) {
+  # T = Total horizon in hours
+  #if(dim(prices)[1] != dim(loads)[1]) stop("dimensions of prices and natural loads do not agree ")
+  #print()
+  #demand <- prices %>% dplyr::inner_join(loads)
+  T_total <- nrow(demand)
+  fload <- (1-phi)*demand$load
+  print(paste("mean load =", mean(fload)))
+  price <- demand$price
+  if(length(price) != length(fload)) stop("load and price data mismatch")
+  # 1. Bandwidth for the Exponential Kernel
+  W <- ceiling(5 * tau)
+  lags <- 0:W
+  kernel_values <- exp(-lags / tau)
+  #frobenius scaling
+  frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
+  frob_norm <- sqrt(frob_sq)
+  # scaled gamma
+  gamma_scaled <- gamma / frob_norm
+
+  # 2. Build Quadratic Matrix P
+  # Discomfort Kernel (Banded Sparse)
+  P_kern <- Matrix::bandSparse(T_total, k = lags,
+                       diag = lapply(kernel_values, function(v) rep(v, T_total)),
+                       symmetric = TRUE)
+
+  # Kinetic/Ramping Penalty (Finite Difference Matrix)
+  # Represents eta * sum((x_t+1 - x_t)^2)
+  D <- Matrix::sparseMatrix(i = rep(1:(T_total-1), each = 2),
+                    j = as.vector(rbind(1:(T_total-1), 2:T_total)),
+                    x = rep(c(-1, 1), T_total-1))
+  P_kin <- Matrix::t(D) %*% D
+
+  # Combined P matrix
+  P <- (gamma_scaled * P_kern) + (eta * P_kin)
+  #symmetrise
+  P <- 0.5 * (P + Matrix::t(P))
+  # 3. Linear Vector q (Prices)
+  q <- price
+
+  # 4. Constraints (A*x)
+  # We stack: 1. Sum(x) = 0  (Equality)
+  #           2. x_t         (Identity for box constraints)
+
+  A_sum <- Matrix::Matrix(1, nrow = 1, ncol = T_total, sparse = TRUE)
+  A_box <- Matrix::Diagonal(T_total)
+  A <- rbind(A_sum, A_box)
+
+  # Lower and Upper Bounds
+  # Equality constraint: l=0, u=0
+  # Capacity constraint: -L0 <= x <= P_max - L0
+  l <- c(0, -fload)
+  u <- c(0, P_max - fload)
+
+  # 5. Solve using OSQP
+  settings <- osqp::osqpSettings(eps_abs = precision, eps_rel = precision, verbose = TRUE)
+  model <- osqp::osqp(P = P, q = q, A = A, l = l, u = u, pars = settings)
+  res <- model@Solve()
+
+  # 6. Post-processing
+  x_opt <- res$x
+  demand$x <- x_opt
+  demand$load_opt <- demand$load + x_opt
+
+  # Split the resulting load into components
+  demand$baseload <- phi*demand$load
+  demand$flex_load <- (1 - phi) * demand$load
+  demand$flex_opt <- (1 - phi) * demand$load + x_opt
+
+  return(demand)
+}

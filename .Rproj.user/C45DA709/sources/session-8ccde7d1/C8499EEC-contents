@@ -1,0 +1,12 @@
+#' @title sem_prices_2023_2025
+#' @description Three years of hourly SEM wholesale electricity prices
+#' @format A data frame with 26304 rows and 2 variables:
+#' \describe{
+#'   \item{\code{datetime}}{double hourly UTC (dttm)}
+#'   \item{\code{price}}{double price in €/MWh}
+#'}
+#' @details Missing data has been interpolated, resulting in 24*1096= 26304 hours of data (1096=365+366+265).
+#' Based on SEM-O data. See /inst/scratch.R.
+#' @source Downloaded from:
+#' \url{https://kilowatt.ie/wholesale-electricity-prices-ireland/5}
+"sem_prices_2023_2025"
