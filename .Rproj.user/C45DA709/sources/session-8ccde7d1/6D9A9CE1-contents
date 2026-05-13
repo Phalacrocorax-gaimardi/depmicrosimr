@@ -1,0 +1,59 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# depmicrosimr
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+Dynamic electricity pricing is believed to be an important tool to deliver flexible response by consumers to wholesale electricity prices. *depmicrosimr* is an agent-based model designed to project the uptake of dynamic electricity tariffs on Irish consumers and the consequences for the power system.
+
+## Installation
+
+You can install the development version of depmicrosimr from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("phalacrocorax-gaimardi/depmicrosimr")
+```
+
+## Example
+
+Simulate load-shifting by a typical household switching from flat pricing to dynamic pricing. This is based on 2025 wholesale prices in the dataset *sem_prices_2023_2025* and standard urban load profile LP1 in the dataset *load_profiles*.
+
+```{r example}
+library(depmicrosimr)
+#optimise load-shifting behaviour based on 2025 wholesale prices for a household with "natural" load profile LP1
+demand <- make_demand_response_data(profile="lp1",mean_daily_load=20,years=2025)
+#assume 50% of load is flexible, behavioural cost parameter is 0.5, loads are shiftable over 24h period.
+get_flex(demand,phi=0.5,tau=24,gamma=0.5)
+
+```
+
+What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+
+```{r cars}
+summary(cars)
+```
+
+You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
+
+You can also embed plots, for example:
+
+```{r pressure, echo = FALSE}
+plot(pressure)
+```
+
+In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.

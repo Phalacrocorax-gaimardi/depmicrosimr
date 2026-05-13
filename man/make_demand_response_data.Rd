@@ -24,5 +24,5 @@ dataframe of hourly data for year. load in kWh, price in euro/kWh
 make_demand_response_data
 }
 \examples{
-#make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
+make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
 }

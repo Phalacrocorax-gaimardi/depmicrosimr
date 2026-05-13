@@ -3,7 +3,7 @@
     "path": "C:/Users/Joe/pkgs/depmicrosimr/R/finance.R",
     "project_path": "R/finance.R",
     "type": "r_source",
-    "hash": "665577030",
+    "hash": "3949910175",
     "contents": "",
     "dirty": false,
     "created": 1776333360873.0,
@@ -13,15 +13,15 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "125,21",
-        "scrollLine": "121"
+        "cursorPosition": "30,87",
+        "scrollLine": "29"
     },
-    "folds": "25|89|34|2|\n",
-    "lastKnownWriteTime": 1778597593,
+    "folds": "",
+    "lastKnownWriteTime": 1778674231,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1778597593295,
+    "last_content_update": 1778674231997,
     "read_only": false,
     "read_only_alternatives": []
 }

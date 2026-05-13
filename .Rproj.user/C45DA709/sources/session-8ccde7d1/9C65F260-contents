@@ -21,14 +21,14 @@
 #' @export
 #'
 #' @examples
-#' #make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
+#' make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
 
 make_demand_response_data <- function(profile="lp1",mean_daily_load=20, years=2023:2025){
 
   load <- load_profiles %>% dplyr::select(datetime,any_of(profile))
   load <- load %>% dplyr::rename("load"=profile) %>% dplyr::mutate(load=mean_daily_load*365*load)
 
-  load_e<- lapply(years, function(y) {load %>% dplyr::mutate(datetime=update(datetime,year = y))}) %>% dplyr::bind_rows()
+  load_e<- lapply(years, function(y) {load %>% dplyr::mutate(datetime=timechange::time_update(datetime,year = y))}) %>% dplyr::bind_rows()
 
   sem_prices_2023_2025 %>% dplyr::mutate(price=price/1000) %>% dplyr::inner_join(load_e)
 
