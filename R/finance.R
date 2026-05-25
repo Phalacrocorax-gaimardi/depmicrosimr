@@ -13,6 +13,8 @@
 
 #' make_demand_response_data
 #'
+#' this is a utility function that returns a dataframe of hourly household loads and retail prices for input into get_flex
+#'
 #' @param profile load index column name from load_profiles
 #' @param mean_daily_load mean daily load
 #' @param years year(s) of price data, from sem_prices_2023_2025
@@ -132,3 +134,6 @@ get_flex <- function(demand, phi = 0.5, tau = 24, gamma = 0.5, eta = 1.0, P_max 
 
   return(demand)
 }
+
+
+

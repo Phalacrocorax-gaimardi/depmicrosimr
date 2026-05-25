@@ -1,0 +1,19 @@
+Year,Tariff Type,Day (c/kWh),Night (c/kWh),Peak (c/kWh),Standing Charge,Intended Customer
+2018,Flat,18,—,—,Medium,General
+2018,Day/Night,20,9,—,Slightly higher,Storage heating
+2019,Flat,19,—,—,Medium,General
+2019,Day/Night,21,10,—,Slightly higher,Storage heating
+2020,Flat,20,—,—,Medium,General
+2020,Day/Night,22,10,—,Slightly higher,Storage heating
+2021,Flat,22,—,—,Medium,General
+2021,Smart Peak,21,12,28,Similar,Early smart adopters
+2022,Flat,32,—,—,Medium-high,General
+2022,Smart Peak,30,20,42,Similar,Flexible users
+2023,Flat,40,—,—,High,General
+2023,Smart Peak,36,22,50,Similar/high,EV + battery users
+2024,Flat,36,—,—,High,General
+2024,Smart Peak,33,21,46,Similar/high,Flexible users
+2025,Flat,33,—,—,Medium-high,General
+2025,Smart Peak,31,19,42,Similar,Flexible users
+2026,Flat,31,—,—,Medium,General
+2026,Smart Peak,29,18,40,Similar,Flexible users

@@ -21,7 +21,7 @@ make_demand_response_data(
 dataframe of hourly data for year. load in kWh, price in euro/kWh
 }
 \description{
-make_demand_response_data
+this is a utility function that returns a dataframe of hourly household loads and retail prices for input into get_flex
 }
 \examples{
 make_demand_response_data("lp1",mean_daily_load=20, years=2023:2025)
