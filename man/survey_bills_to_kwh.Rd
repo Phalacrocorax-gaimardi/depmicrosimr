@@ -14,7 +14,7 @@ survey_bills_to_kwh(data_in, lag_D = 30)
 \description{
 a function that converts highest and lower bi-monthly bills from survey to daily D_max and D_min assuming
 a seasonal demand lag_D. D_max and D_min are used to estimate the financial return on pv bess investment.
-Missing data are imputed by default. An issue that needs to be addressed is "level pay"
+Missing data are imputed by default. An issue that needs to be addressed is "level pay". Stochastic.
 }
 \examples{
 survey_bills_to_kwh(dep_survey,lag_D=30)

@@ -1,4 +1,7 @@
+####################
 #technicals
+####################
+
 #bill_values <- read_csv("~/Policy/CAMG/SolarPVReport/PVBESS_calibrater/bills.csv")
 #sD <- readxl::read_xlsx("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/scenario_parameters.xlsx",sheet="Base")
 
@@ -14,58 +17,19 @@
 #' @export
 #'
 #' @examples
+#' params <- scenario_params(sD,2026)
 scenario_params <- function(sD,yeartime){
   #fast params
   scen <- tibble::tibble(parameter="yeartime", value=  yeartime)
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dep_introduction", value=  dplyr::filter(sD, parameter=="dep_introduction")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="tou_introduction", value=  dplyr::filter(sD, parameter=="tou_introduction")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="bess_labour_cost", value=  bess_labour_cost_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_cost", value=  pv_cost_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_margin", value=  dplyr::filter(sD, parameter=="pv_margin")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_sbos", value=  dplyr::filter(sD, parameter=="pv_sbos")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_labour", value=  pv_labour_cost_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_inverter", value=  pv_inverter_cost_fun(sD,yeartime)))
-  # scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_install_cost", value=  pv_install_cost_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pvbess_cost_synergy",  value=dplyr::filter(sD, parameter=="pvbess_cost_synergy")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="overhead",  value=dplyr::filter(sD, parameter=="overhead")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_tariff", value =  day_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="evening_tariff", value =  evening_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_tariff", value =  night_tariff_fun(sD,yeartime)))
-  #  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="e_price_inflation", value =  electricity_price_inflation_fun(sD,yeartime)))
-  #  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="fit_inflation", value =  fit_inflation_fun(sD,yeartime)))
-  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="fit_price_inflation", value =  0))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="flat_tariff", value=  flat_tariff_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_tariff", value=  day_tariff_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_tariff", value=  night_tariff_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_tariff", value=  peak_tariff_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dynamic_scale", value=  dynamic_scale_fun(sD,yeartime)))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge", value =  standing_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="fit", value =  fit_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="fit_tax_threshold", value =  fit_tax_threshold_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="resilience_premium", value =  resilience_premium_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="marginal_tax_rate", value =  dplyr::filter(sD, parameter=="marginal_tax_rate")$value))
-  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="finance_rate", value =  finance_rate_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="term_of_loan", value =  dplyr::filter(sD, parameter=="term_of_loan")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="discount_rate", value =  dplyr::filter(sD, parameter=="discount_rate")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="system_lifetime", value =  dplyr::filter(sD, parameter=="system_lifetime")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="e_demand_factor", value =  electricity_demand_factor_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="sol_lower_threshold", value =  dplyr::filter(sD, parameter=="sol_lower_threshold")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="sol_upper_threshold", value =  dplyr::filter(sD, parameter=="sol_upper_threshold")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="sol_lower_grant", value =  dplyr::filter(sD, parameter=="sol_lower_grant")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="sol_upper_grant", value =  dplyr::filter(sD, parameter=="sol_upper_grant")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="sol_lower_threshold", value =  dplyr::filter(sD, parameter=="sol_lower_threshold")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="grant_introduction_date", value =  dplyr::filter(sD, parameter=="grant_introduction_date")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="pv_grant_removal_date", value =  dplyr::filter(sD, parameter=="pv_grant_removal_date")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="bess_grant_removal_date", value =  dplyr::filter(sD, parameter=="bess_grant_removal_date")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="bess_threshold", value =  dplyr::filter(sD, parameter=="bess_threshold")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="bess_grant", value =  dplyr::filter(sD, parameter=="bess_grant")$value))
-  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="self_sufficiency_effect", value =  self_sufficiency_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="kWp_per_m2", value =  kWp_per_m2_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="usable_roof_fraction", value =  dplyr::filter(sD, parameter=="usable_roof_fraction")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="mean_shading_factor", value =  dplyr::filter(sD, parameter=="mean_shading_factor")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="latitude", value =  dplyr::filter(sD, parameter=="latitude")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="K_max", value =  dplyr::filter(sD, parameter=="K_max")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="K_min", value =  dplyr::filter(sD, parameter=="K_min")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="lag_D", value =  dplyr::filter(sD, parameter=="lag_D")$value))
-  # scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho_solstice", value =  dplyr::filter(sD, parameter=="rho_solstice")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="acceleration_factor", value =  acceleration_fun(sD,yeartime)))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="beta.", value =  dplyr::filter(sD, parameter=="beta.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="lambda.", value =  dplyr::filter(sD, parameter=="lambda.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(sD, parameter=="p.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(sD, parameter=="nu.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(sD, parameter=="rho.")$value))
@@ -76,14 +40,30 @@ scenario_params <- function(sD,yeartime){
   return(scen %>% fast_params())
 }
 
+#' fast_params
+#'
+#' helper function to convert a long format dataframe to an environment object, used for fast access to scenario parameters
+#'
+#' @param params_long long format dataframe with columns "parameter" and "value"
+#'
+#' @return environment object
+#' @export
+#'
+#' @examples
+fast_params <- function(params_long){
 
+  test <- as.list(params_long$value)
+  names(test) <- params_long$parameter
+  test <- list2env(test)
+  return(test)
+}
 
 
 #' survey_bills_to_kwh
 #'
 #' a function that converts highest and lower bi-monthly bills from survey to daily D_max and D_min assuming
 #' a seasonal demand lag_D. D_max and D_min are used to estimate the financial return on pv bess investment.
-#' Missing data are imputed by default. An issue that needs to be addressed is "level pay"
+#' Missing data are imputed by default. An issue that needs to be addressed is "level pay". Stochastic.
 #'
 #' @param data_in survey data e.g. dep_survey
 #' @param lag_D seasonal lag in demand, default 30 days.
@@ -155,7 +135,7 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
   complete_data <- complete_data %>% tidyr::drop_na() %>% dplyr::rowwise() %>% dplyr::mutate(params = list(get_demand_params(highest_kwh, lowest_kwh,lag_D))) %>%
     dplyr::ungroup() %>% tidyr::unnest_wider(params)
   #model annual demand
-  complete_data <- complete_data %>% dplyr::rowwise() %>% dplyr::mutate(annual_kwh=sum(demand_fun(1:365,D_max,D_min)))
+  complete_data <- complete_data %>% dplyr::rowwise() %>% dplyr::mutate(kWh=sum(demand_fun(1:365,D_max,D_min)))
 
   complete_data %>% dplyr::arrange(serial) %>% return()
 }
@@ -209,7 +189,7 @@ get_demand_params <- function(highest_kwh,lowest_kwh,lag_D = 30){
 
 
 
-#' day_tariff_fun
+#' flat_tariff_fun
 #'
 #' all tou tariffs are driven by the flat rate.
 #'
@@ -226,7 +206,7 @@ flat_tariff_fun <- function(sD,yeartime){
   seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
   #cost_2022 <- sD %>% dplyr::filter(parameter=="electricity_price_2022") %>% dplyr::pull(value)
   values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
-  approx(x=c(seai_elec1$year+0.5,2030.5,2040.5), y=c(seai_elec1$price,values),xout=yeartime,rule=2)$y %>% return()
+  approx(x=c(seai_elec1$year+0.5,2030.5,2040.5), y=c(seai_elec1$price/100,values),xout=yeartime,rule=2)$y %>% return()
 }
 
 
@@ -265,7 +245,7 @@ day_tariff_fun <- function(sD,yeartime){
 #' @export
 #'
 #' @examples
-night_discount_fun <- function(sD,yeartime){
+night_tariff_fun <- function(sD,yeartime){
   #
   seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
   ratios <- sD %>% dplyr::filter(parameter %in% c("night_flat_ratio","night_flat_ratio_2030","night_flat_ratio_2040")) %>% dplyr::pull(value)
@@ -273,16 +253,83 @@ night_discount_fun <- function(sD,yeartime){
   approx(x=c(seai_elec1$year+0.5,2030.5,2050.5), y=c(seai_elec1$price/100*ratios[1],values*ratios[2:3]),xout=yeartime,rule=2)$y %>% return()
 }
 
+#' peak_tariff_fun
+#'
+#' Peak 5-7pm ToU tariffs. Historical rates are set at 45% of the day rate
+#'
+#' @param sD scenario dataframe
+#' @param yeartime decimal time
+#'
+#' @return price per kWh in euros
+#' @export
+#'
+#' @examples
+#' peak_tariff_fun(sD,2028.7)
+peak_tariff_fun <- function(sD,yeartime){
+  #
+  seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
+  ratios <- sD %>% dplyr::filter(parameter %in% c("peak_flat_ratio","peak_flat_ratio_2030","peak_flat_ratio_2040")) %>% dplyr::pull(value)
+  values <- values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
+  approx(x=c(seai_elec1$year+0.5,2030.5,2050.5), y=c(seai_elec1$price/100*ratios[1],values*ratios[2:3]),xout=yeartime,rule=2)$y %>% return()
+}
+
+
+#' dynamic_scale_fun
+#'
+#' Assumes that the dynamic pricing tariff at yeartime is
+#' \deqn{p_{dynamic}=scale \times p_{wholesale}}
+#' Historically, the retail tariffs are about three times the wholesale price
+#'
+#' @param sD input scenario
+#' @param yeartime decimal time
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+#' dynamic_scale_fun(sD,2034.5)
+#'
+dynamic_scale_fun <- function(sD,yeartime){
+
+  ratios <- sD %>% dplyr::filter(parameter %in% c("dynamic_tariff_scale","dynamic_tariff_scale_2030","dynamic_tariff_scale_2040")) %>% dplyr::pull(value)
+  approx(x=c(2026.5,2030.5,2050.5), y=c(ratios),xout=yeartime,rule=2)$y %>% return()
+
+}
+
+
+#' standing_charge_fun
+#'
+#' household standing charge (expectations & historical). The current model assumes that the standing charge
+#'
+#' @param sD scenario dataframe
+#' @param yeartime decimal time
+#'
+#' @return standing charge
+#' @export
+#'
+#' @examples
+#' standing_charge_fun(sD,2026)
+standing_charge_fun <- function(sD,yeartime){
+
+  values <- sD %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+  approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y %>% return()
+
+
+}
+
+
 
 #' decompose_logprices
 #'
 #' Seasonal and Trend decomposition using Loess (STL) decomposition of historical wholesale prices.
 #' \cr
 #' A log-type transformation \deqn{y=\operatorname{arcsinh}(\frac{x}{scale})}
-#' This is referred to as the "logprice", although it is linear for small x to handle negative prices
+#' This is referred to as the "logprice" and is close to a log transformation when x is larger than \eqn{scale}. However, it crosses over to a linear function for small xand therefore handle negative wholesale prices smoothly.
 #' \cr
 #' The seasonal decomposition is in to periodic daily, weekly and aperiodic yearly terms.
-#' decompose_logprices() fills any gaps in the input data to form an hourly time series.
+#' decompose_logprices() also fills any gaps in the input data to form an hourly time series.\cr
+#' \cr
+#' The output of decompose_logprices() is the key input to generate_logprice_hmm() and to simulate_prices()
 #'
 #' @param price_data price data in format datetime,price e.g. sem_prices_2019_2025
 #' @param scale scale used in asinh transformation
@@ -291,8 +338,9 @@ night_discount_fun <- function(sD,yeartime){
 #' @export
 #'
 #' @examples
-#'
 #' decompose_logprices(sem_prices_2019_2025,scale=10)
+#'
+
 
 decompose_logprices <- function(price_data,scale=10){
 
@@ -336,6 +384,8 @@ decompose_logprices <- function(price_data,scale=10){
 #' supposed to represent high RES/low demand, normal RES/demand and low RES/high demand regimes.\cr
 #' \cr
 #' generate_logprice_hmm uses a gaussian model at present. This should be replaced by fat-tailed distribution e.g. student-t in future.
+#' \cr
+#' This function is used to generate .. . It is not necessary to run this function at the beginning of each simulation run.
 #'
 #' @param dcmp decomposed logprices from decompose_logprices()
 #' @param n_states number of Markov states, default 3
@@ -344,11 +394,13 @@ decompose_logprices <- function(price_data,scale=10){
 #' @export
 #'
 #' @examples
+#' dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
+#' generate_logprice_hmm(dcmp,n_state=3)
 #'
 generate_logprice_hmm <- function(dcmp,n_states=3){
   #
   model <- depmixS4::depmix(remainder ~ 1, nstates = n_states, data = data.frame(dcmp))
-  fit_model <- fit(model)
+  fit_model <- depmixS4::fit(model)
   summary(fit_model)
   print(paste("BIC score", n_states, "states",BIC(fit_model)))
   return(fit_model)
@@ -357,10 +409,13 @@ generate_logprice_hmm <- function(dcmp,n_states=3){
 
 #' simulate_prices
 #'
-#' Generates an hourly wholesale price simulation from Jan 1 2026 to31 Dec 2040.\cr
+#' This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
 #' \cr
-#' The projections derive from the product of three factors - trend, seasonal, and gaussian HMM components. Thus
-#' projections reflect heteroskedasticity of
+#' The projections derive from the product of three factors - a price trend, a seasonal component, and a hidden markov gaussian noise components. Thus
+#' projections reflect heteroskedasticity of electricity prices and and is achieved through a log-type transformation of the price data.
+#' \cr
+#' In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
+#' a log transformation for prices greater than \eqn{scale}.
 #'
 #' @param dcmp decomposed logprice output from decompose_logprices()
 #' @param fit_hmm the HMM fit to residuals from generate_logprice_hmm()
@@ -375,7 +430,8 @@ generate_logprice_hmm <- function(dcmp,n_states=3){
 #' @export
 #'
 #' @examples
-#'
+#' dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
+#' simulate_prices(dcmp,hmm_fit, trend_price_2030=150, trend_price_2040=200)
 #'
 simulate_prices <- function(dcmp,fit_hmm,scale=10, end_year=2040, trend_price_2030,trend_price_2040, drop_hmm=FALSE,drop_season=FALSE){
   #
@@ -465,6 +521,5 @@ simulate_prices <- function(dcmp,fit_hmm,scale=10, end_year=2040, trend_price_20
   hist <- dcmp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
   hist <- hist %>% dplyr::mutate(price= scale*sinh(logprice)) %>% dplyr::select(-logprice)
   hist %>% dplyr::bind_rows(sim_prices)
-
 
 }

@@ -33,8 +33,16 @@ simulate_prices(
 \item{drop_season}{option to drop the seasonal components}
 }
 \description{
-Generates an hourly wholesale price simulation from Jan 1 2026 to31 Dec 2040.\cr
+This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
 \cr
-The projections derive from the product of three factors - trend, seasonal, and gaussian HMM components. Thus
-projections reflect heteroskedasticity of
+The projections derive from the product of three factors - a price trend, a seasonal component, and a hidden markov gaussian noise components. Thus
+projections reflect heteroskedasticity of electricity prices and and is achieved through a log-type transformation of the price data.
+\cr
+In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
+a log transformation for prices greater than \eqn{scale}.
+}
+\examples{
+dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
+simulate_prices(dcmp,hmm_fit, trend_price_2030=150, trend_price_2040=200)
+
 }

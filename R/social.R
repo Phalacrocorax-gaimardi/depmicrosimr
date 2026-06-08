@@ -114,6 +114,21 @@ get_network_characteristics <- function(society, g){
     dplyr::ungroup()
 
   # Render the clean table
+  if (!requireNamespace("knitr", quietly = TRUE)) {
+    stop(
+      "The 'knitr' package is required table rendering",
+      call. = FALSE
+    )
+  }
+
+  if (!requireNamespace("kableExtra", quietly = TRUE)) {
+    stop(
+      "The 'kableExtra' package is required table rendering ",
+      "Please install it using install.packages('kableExtra')",
+      call. = FALSE
+    )
+  }
+
   homophily1 %>%
     knitr::kable() %>%
     kableExtra::kable_styling()

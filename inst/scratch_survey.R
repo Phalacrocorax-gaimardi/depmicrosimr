@@ -30,3 +30,16 @@ degrees <- dep_society %>% dplyr::filter(!is.na(degree) & degree != 0) %>% pull(
 degrees <- degrees %>% as_tibble()
 names(degrees) <- c("degree","n")
 degrees <- degrees %>% mutate(f=n/sum(n))
+
+#####################
+# remove pay as you go
+###############
+dep_qanda %>% filter(question_code=="q41")
+dep_survey %>% dplyr::filter(!is.na(Q41_oth))
+dep_survey %>% dplyr::filter(q41==4) %>% dim()
+prepays <- dep_survey %>% dplyr::filter(str_detect(Q41_oth,"Pay|pay")) %>% pull(serial)
+weekend <- dep_survey %>% dplyr::filter(str_detect(Q41_oth,"Week|week|Sunday|Saturday|saturday|sunday")) %>% pull(serial)
+
+dep_survey %>% dplyr::filter(q41==4 & !(serial %in% c(prepays,weekend))) %>% select(serial,Q41_oth)
+
+

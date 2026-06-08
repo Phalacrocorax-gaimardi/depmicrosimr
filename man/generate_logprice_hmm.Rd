@@ -16,4 +16,11 @@ creates an n state hidden Markov model based on residuals extracted from decompo
 supposed to represent high RES/low demand, normal RES/demand and low RES/high demand regimes.\cr
 \cr
 generate_logprice_hmm uses a gaussian model at present. This should be replaced by fat-tailed distribution e.g. student-t in future.
+\cr
+This function is used to generate .. . It is not necessary to run this function at the beginning of each simulation run.
+}
+\examples{
+dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
+generate_logprice_hmm(dcmp,n_state=3)
+
 }

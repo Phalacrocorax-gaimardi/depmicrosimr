@@ -18,12 +18,14 @@ dataframe with STL decomposition of hourly price data
 Seasonal and Trend decomposition using Loess (STL) decomposition of historical wholesale prices.
 \cr
 A log-type transformation \deqn{y=\operatorname{arcsinh}(\frac{x}{scale})}
-This is referred to as the "logprice", although it is linear for small x to handle negative prices
+This is referred to as the "logprice" and is close to a log transformation when x is larger than \eqn{scale}. However, it crosses over to a linear function for small xand therefore handle negative wholesale prices smoothly.
 \cr
 The seasonal decomposition is in to periodic daily, weekly and aperiodic yearly terms.
-decompose_logprices() fills any gaps in the input data to form an hourly time series.
+decompose_logprices() also fills any gaps in the input data to form an hourly time series.\cr
+\cr
+The output of decompose_logprices() is the key input to generate_logprice_hmm() and to simulate_prices()
 }
 \examples{
-
 decompose_logprices(sem_prices_2019_2025,scale=10)
+
 }

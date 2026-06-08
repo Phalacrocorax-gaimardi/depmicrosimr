@@ -2,7 +2,7 @@
 % Please edit documentation in R/technicals.R
 \name{flat_tariff_fun}
 \alias{flat_tariff_fun}
-\title{day_tariff_fun}
+\title{flat_tariff_fun}
 \usage{
 flat_tariff_fun(sD, yeartime)
 }

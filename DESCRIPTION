@@ -1,7 +1,7 @@
 Package: depmicrosimr
 Type: Package
 Title: Agent-based simulations of the uptake of dynamic electricity pricing traiffs by Irish households
-Version: 0.1.03
+Version: 0.1.04
 Authors@R: c(
     person(
       "Pranay", "Kumar",
@@ -27,19 +27,22 @@ Imports:
     feasts,
     igraph,
     imputeTS,
-    kableExtra,
-    knitr,
     lubridate,
     magrittr,
     Matrix,
     nloptr,
     osqp,
+    stringr,
     tibble,
     tidygraph,
     tidyr,
     timechange,
     tsibble,
     zoo
+Suggests:
+    kableExtra,
+    knitr,
 RoxygenNote: 7.3.1
+LazyDataCompression: xz
 Depends: 
     R (>= 2.10)
