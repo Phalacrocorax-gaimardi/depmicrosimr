@@ -4,6 +4,8 @@
 
 #bill_values <- read_csv("~/Policy/CAMG/SolarPVReport/PVBESS_calibrater/bills.csv")
 #sD <- readxl::read_xlsx("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/scenario_parameters.xlsx",sheet="Base")
+#struct_model <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dep_struct_model.csv")
+#smart_meter_rollout <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/smart_meter_rollout.csv")
 
 
 #' scenario_params

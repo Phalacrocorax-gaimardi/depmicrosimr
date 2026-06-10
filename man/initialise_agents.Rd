@@ -11,8 +11,13 @@ initialise_agents(sD, start_year = 2019)
 
 \item{start_year}{default 2019}
 }
+\value{
+a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
+}
 \description{
-sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)
+sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
+\cr
+14% of households are on the old (dual meter) day/night tariff.
 }
 \examples{
 initialise_agents(sD,2019)
