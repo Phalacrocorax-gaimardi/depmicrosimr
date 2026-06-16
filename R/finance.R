@@ -51,9 +51,9 @@ make_demand_response_data <- function(profile="lp1",mean_daily_load=20, years=20
 #'
 #' @param demand a 3 column dataframe of datetime, hourly prices and natural_load
 #' @param phi baseload (inflexible) fraction of load
-#' @param tau flexibility time horizon in hours
 #' @param gamma the quandatric cost penalty weight
 #' @param eta weight of the kinetic term (regularisation)
+#' @param tau flexibility time horizon in hours
 #' @param P_max the maximum permitted load
 #' @param precision desired solver precision
 #'
@@ -63,7 +63,7 @@ make_demand_response_data <- function(profile="lp1",mean_daily_load=20, years=20
 #' @examples
 #'
 #'
-get_flex <- function(demand, phi = 0.5, tau = 24, gamma = 0.5, eta = 1.0, P_max = 10,precision=1e-6) {
+get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 0.1,tau = 24,  P_max = 10,precision=1e-6) {
   # T = Total horizon in hours
   #if(dim(prices)[1] != dim(loads)[1]) stop("dimensions of prices and natural loads do not agree ")
   #print()
@@ -136,4 +136,58 @@ get_flex <- function(demand, phi = 0.5, tau = 24, gamma = 0.5, eta = 1.0, P_max 
 }
 
 
+#
+#' get_annual_cost
+#'
+#' evaluates the annual electricity cost of tariff scheme at yeartime for an agent with known natural load profile and flexibility parameters.\cr
+#' \cr
+#' At present the tariff scheme are flat, day/night/peak and dynamic and the characteristic load profile is LP1 or LP3. Future price assumptions
+#' are typically the output of get_tariff_prices(scenario)
+#'
+#' @param yeartime decimal time
+#' @param kWh annual consumption kWh (assumed inflexible)
+#' @param phi inflexible fraction
+#' @param gamma cost penalty parameter
+#' @param eta kinetic regularisation (currently fixed at 0.1)
+#' @param tau energy consumption mean reversion time
+#' @param profile household usage profile e.g. LP1
+#' @param prices_scen tariff price scenario
+#'
+#' @returns a real number, euros
+#' @export
+#'
+#' @examples
+#'
+#' prices_scen <- get_tariff_prices(sD)
+#' get_annual_cost(2030,4000,phi=0.5,gamma=10,eta=0.1,tau=48,prices_scen=prices_scen)
+#'
+get_annual_cost <- function(yeartime, kWh,phi=0.5,gamma=0.25,eta=0.1,tau=24,profile="LP1",prices_scen){
 
+  profile <- tolower(profile)
+  load <- load_profiles %>% dplyr::select(datetime,dplyr::any_of(profile)) %>% dplyr::rename("load":=all_of(profile))
+  #normalise to kWh annual
+  load <- load %>% dplyr::mutate(load = load*kWh)
+
+  start_time <- lubridate::date_decimal(yeartime) %>% lubridate::floor_date(unit="hour")
+  end_time <- lubridate::date_decimal(yeartime+1) %>% lubridate::ceiling_date(unit="hour")
+  datetimes <- seq(start_time,end_time,by="hour")
+  prices <- prices_scen %>% dplyr::filter(datetime %in% datetimes)
+  #do an inner join by month, day, time by intrdoucinga  dummy year (2000, a leap year)
+  df <- prices %>% dplyr::mutate(match_time = update(datetime, year = 2000))
+  df <- df %>% dplyr::inner_join(load %>% dplyr::mutate(match_time = update(datetime, year = 2000)) %>% dplyr::select(-datetime),by = "match_time")
+  df <- df %>% dplyr::select(-match_time)
+  #calculate the flexible load in response to price variations
+  df_tou <- df %>% dplyr::filter(tariff_plan == "tou") %>% dplyr::select(datetime,load,price)
+  df_dyn <- df %>% dplyr::filter(tariff_plan == "dynamic") %>% dplyr::select(datetime,load,price)
+  df_flat <- df %>% dplyr::filter(tariff_plan == "flat") %>% dplyr::select(datetime,load,price)
+  #flexibilties
+  df_tou <- get_flex(df_tou,phi,gamma,eta,tau) %>% dplyr::select(datetime,price,load,load_opt) %>% dplyr::mutate(tariff_plan="tou")
+  df_dyn <- get_flex(df_dyn,phi,gamma,eta,tau) %>% dplyr::select(datetime,price,load,load_opt) %>% dplyr::mutate(tariff_plan="dynamic")
+  df_flat <- get_flex(df_flat,phi,gamma,eta,tau) %>% dplyr::select(datetime,price,load,load_opt) %>% dplyr::mutate(tariff_plan="flat")
+  df <- dplyr::bind_rows(df_flat,df_tou,df_dyn)
+
+  df_summary <- df %>% dplyr::group_by(tariff_plan) %>% dplyr::summarise(annual_bill_inflexible=sum(price*load),
+                                                           annual_bill_flexible = sum(price*load_opt))
+  df_summary %>% dplyr::mutate(gain=round(annual_bill_flexible-annual_bill_inflexible))
+
+}

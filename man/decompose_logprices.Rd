@@ -4,12 +4,10 @@
 \alias{decompose_logprices}
 \title{decompose_logprices}
 \usage{
-decompose_logprices(price_data, scale = 10)
+decompose_logprices(price_data)
 }
 \arguments{
 \item{price_data}{price data in format datetime,price e.g. sem_prices_2019_2025}
-
-\item{scale}{scale used in asinh transformation}
 }
 \value{
 dataframe with STL decomposition of hourly price data
@@ -26,6 +24,6 @@ decompose_logprices() also fills any gaps in the input data to form an hourly ti
 The output of decompose_logprices() is the key input to generate_logprice_hmm() and to simulate_prices()
 }
 \examples{
-decompose_logprices(sem_prices_2019_2025,scale=10)
+decompose_logprices(sem_prices_2019_2025)
 
 }

@@ -7,9 +7,9 @@
 get_flex(
   demand,
   phi = 0.5,
-  tau = 24,
   gamma = 0.5,
-  eta = 1,
+  eta = 0.1,
+  tau = 24,
   P_max = 10,
   precision = 1e-06
 )
@@ -19,11 +19,11 @@ get_flex(
 
 \item{phi}{baseload (inflexible) fraction of load}
 
-\item{tau}{flexibility time horizon in hours}
-
 \item{gamma}{the quandatric cost penalty weight}
 
 \item{eta}{weight of the kinetic term (regularisation)}
+
+\item{tau}{flexibility time horizon in hours}
 
 \item{P_max}{the maximum permitted load}
 

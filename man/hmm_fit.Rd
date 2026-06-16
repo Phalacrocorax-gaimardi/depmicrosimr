@@ -19,6 +19,6 @@ A pre-fitted 3-state gaussian hidden markov model trained on SEM wholesale log p
 over the six year period 2019-2026. This model is used to generate simulations of future electricity price fluctuations.
 }
 \details{
-the output of the function generate_logprice_hmm(dcmp,n_states=3)
+the output of the function generate_logprice_hmm(sem_logprices_2019_2023,n_states=3,winsor=0.01)
 }
 \keyword{datasets}

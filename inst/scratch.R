@@ -180,7 +180,7 @@ hourly <- hourly %>% mutate(price = na_seasplit(price, algorithm = "interpolatio
 
 
 
-decompose_logprices <- function(price_data,scale=42){
+decompose_logprices <- function(price_data,scale=10){
 
   hourly <- price_data %>% as_tsibble(index = datetime) #%>% mutate(logprice=log(price+10))
   hourly <- hourly %>% fill_gaps() #replaces with NAs
@@ -223,9 +223,20 @@ g1/g2
 
 dcmp %>% filter(year(datetime)==2024,yday(datetime) %in% 30:40) %>% ggplot()+geom_line(aes(datetime, season_day))+
                                                                                          geom_line(aes(datetime, season_week),colour="red")
-generate_logprice_hmm <- function(dcmp,n_states=3){
-  #
-  model <- depmixS4::depmix(remainder ~ 1, nstates = n_states, data = data.frame(dcmp))
+generate_logprice_hmm <- function(dcmp,n_states=3, winsor =0.01){
+  #winsorised
+  lower_bound <- quantile(dcmp$remainder, winsor)
+  upper_bound <- quantile(dcmp$remainder, 1-winsor)
+
+  # 2. Cap the outliers
+  dcmp_clipped <- dcmp %>%
+    mutate(remainder = case_when(
+      remainder > upper_bound ~ upper_bound,
+      remainder < lower_bound ~ lower_bound,
+      TRUE ~ remainder
+    ))
+
+  model <- depmixS4::depmix(remainder ~ 1, nstates = n_states, data = dcmp_clipped)
   fit_model <- depmixS4::fit(model)
   summary(fit_model)
   print(paste("BIC score", n_states, "states",BIC(fit_model)))
@@ -324,12 +335,19 @@ simulate_prices <- function(dcmp,fit_hmm,scale=10, end_year=2040, trend_price_20
 
 }
 
+
+posterior(fit_hmm)
+
 scale0 <- median(sem_prices_2019_2025$price)/10
+scale0 <- 10
 dcmp <- decompose_logprices(sem_prices_2019_2025,scale=scale0)
 fit_hmm <- generate_logprice_hmm(dcmp,3)
-
-
-proj <- simulate_prices(dcmp,fit_hmm,scale=scale0,trend_price_2030=150,trend_price_2040=250)
+sim <- depmixS4::simulate(fit_hmm, nsim = 1)
+# Extract your new long series
+sim_series <- sim@response[[1]][[1]]@y[,1]
+test <- dcmp %>% mutate(sim=sim_series)
+test %>% ggplot() + geom_line(aes(datetime,scale0*sinh(remainder),colour="red"),alpha=0.5) + geom_line(aes(datetime,scale0*sinh(sim)),colour="green",alpha=0.5)
+proj <- simulate_prices(dcmp,fit_hmm,scale=scale0,trend_price_2030=150,trend_price_2040=200,drop_hmm=F)
 #
 proj %>% ggplot(aes(datetime,price,colour=regime))+geom_line()
 

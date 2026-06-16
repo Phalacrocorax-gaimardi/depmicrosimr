@@ -9,5 +9,5 @@
 #'   \item{response}{Response models for each state}
 #' }
 #' @source
-#' @details the output of the function generate_logprice_hmm(dcmp,n_states=3)
+#' @details the output of the function generate_logprice_hmm(sem_logprices_2019_2023,n_states=3,winsor=0.01)
 "hmm_fit"

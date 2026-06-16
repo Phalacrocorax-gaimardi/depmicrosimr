@@ -4,23 +4,31 @@
 \alias{generate_logprice_hmm}
 \title{generate_logprice_hmm}
 \usage{
-generate_logprice_hmm(dcmp, n_states = 3)
+generate_logprice_hmm(dcmp, n_states = 3, winsor = 0.01)
 }
 \arguments{
 \item{dcmp}{decomposed logprices from decompose_logprices()}
 
 \item{n_states}{number of Markov states, default 3}
+
+\item{winsor}{winsorisation (clipping) level e.g if winsor=0.01 quantile bounds are 1-99}
+}
+\value{
+a depmixS4 model object
 }
 \description{
 creates an n state hidden Markov model based on residuals extracted from decompose_logprices. The default is three states,
 supposed to represent high RES/low demand, normal RES/demand and low RES/high demand regimes.\cr
 \cr
-generate_logprice_hmm uses a gaussian model at present. This should be replaced by fat-tailed distribution e.g. student-t in future.
+generate_logprice_hmm uses a gaussian model at present. In principle should be replaced with fat-tailed distribution e.g. student-t in future
+because outliers lead to an overestimation of standard deviation. The workaround used at present is to winsorise the
+logprice residuals.\cr
 \cr
-This function is used to generate .. . It is not necessary to run this function at the beginning of each simulation run.
+It is not necessary to run this function at the beginning of each simulation run. The 2019-2025 calibration is in
+the depmixS4 model hmm_fit.
 }
 \examples{
-dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
+dcmp <- decompose_logprices(sem_prices_2019_2025)
 generate_logprice_hmm(dcmp,n_state=3)
 
 }

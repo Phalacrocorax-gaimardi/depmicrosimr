@@ -16,7 +16,8 @@
 #' @return a tidygraph object
 #' @export
 #' @importFrom magrittr %>%
-#' @examples make_artificial_society(dep_society,homophily,nu=4.5)
+#' @examples
+#' make_artificial_society(dep_society,homophily,nu=4.5)
 #'
 make_artificial_society <- function(society=society,homophily=homophily,nu=4.5){
   #create a random homophilous social network

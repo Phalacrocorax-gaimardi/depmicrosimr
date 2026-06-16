@@ -7,7 +7,6 @@
 simulate_prices(
   dcmp,
   fit_hmm,
-  scale = 10,
   end_year = 2040,
   trend_price_2030,
   trend_price_2040,
@@ -20,11 +19,9 @@ simulate_prices(
 
 \item{fit_hmm}{the HMM fit to residuals from generate_logprice_hmm()}
 
-\item{scale}{the asinh() price transformation scale, default 10euros/MWh}
-
 \item{end_year}{the last year of the price simulation}
 
-\item{trend_price_2030}{the trend SEM price at the end of 2030}
+\item{trend_price_2030}{the trend SEM `price at the end of 2030}
 
 \item{trend_price_2040}{the trend SEM price at the end of 2040}
 
@@ -42,7 +39,8 @@ In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This 
 a log transformation for prices greater than \eqn{scale}.
 }
 \examples{
-dcmp <- decompose_logprices(sem_prices_2019_2025,scale=10)
-simulate_prices(dcmp,hmm_fit, trend_price_2030=150, trend_price_2040=200)
+dcmp <- decompose_logprices(sem_prices_2023_2025)
+fit_hmm <- generate_logprice_hmm(dcmp,n_state=3)
+simulate_prices(dcmp,fit_hmm, trend_price_2030=150, trend_price_2040=200)
 
 }
