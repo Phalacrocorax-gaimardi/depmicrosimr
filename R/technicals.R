@@ -7,6 +7,7 @@
 #struct_model <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dep_struct_model.csv")
 #smart_meter_rollout <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/smart_meter_rollout.csv")
 #tou_tariffs <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/tariffs.csv")
+#flex_scores <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
 
 
 
@@ -191,6 +192,62 @@ get_demand_params <- function(highest_kwh,lowest_kwh,lag_D = 30){
   names(solution) <- c("D_max","D_min")
   solution %>% return()
 }
+
+#' night_network_charge_fun
+#'
+#' Night network base price.
+#'
+#' @param sD scenario dataframe
+#' @param yeartime decimal time
+#'
+#' @return price per kWh in euros
+#' @export
+#'
+#' @examples
+#' night_network_charge_fun(sD,2028.6)
+night_network_charge_fun <- function(sD,yeartime){
+  #
+  charges <- sD %>% dplyr::filter(parameter %in% c("night_network_charge_2020","night_network_charge_2026","night_network_charge_2030","night_network_charge_2040")) %>% dplyr::pull(value)
+  approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
+}
+
+#' day_network_charge_fun
+#'
+#' day network base price.
+#'
+#' @param sD scenario dataframe
+#' @param yeartime decimal time
+#'
+#' @return price per kWh in euros
+#' @export
+#'
+#' @examples
+#' day_network_charge_fun(sD,2028.6)
+day_network_charge_fun <- function(sD,yeartime){
+  #
+  charges <- sD %>% dplyr::filter(parameter %in% c("day_network_charge_2020","day_network_charge_2026","day_network_charge_2030","day_network_charge_2040")) %>% dplyr::pull(value)
+  approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
+}
+
+
+#' peak_network_charge_fun
+#'
+#' peak network charges + supplier ToU uplift. The base price of dynamic pricing.
+#'
+#' @param sD scenario dataframe
+#' @param yeartime decimal time
+#'
+#' @return price per kWh in euros
+#' @export
+#'
+#' @examples
+#' peak_network_charge_fun(sD,2028.6)
+peak_network_charge_fun <- function(sD,yeartime){
+  #
+  charges <- sD %>% dplyr::filter(parameter %in% c("peak_network_charge_2020","peak_network_charge_2026","peak_network_charge_2030","peak_network_charge_2040")) %>% dplyr::pull(value)
+  approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
+}
+
 
 
 
@@ -667,7 +724,8 @@ dynamic_prices <- function(scen,end_year=2040){
 #' get_tariff_prices
 #'
 #' creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
-#' dynamic simulated prices set at the beginning of each model run (dyn_prices)
+#' The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run). A dynmaic price
+#' cap is
 #'
 #' @param scen scenario
 #' @param start_year default 2019
@@ -677,6 +735,7 @@ dynamic_prices <- function(scen,end_year=2040){
 #' @export
 #'
 #' @examples
+#' prices_scen <- get_tariff_prices(sD)
 get_tariff_prices <- function(scen,start_year=2019,end_year=2040){
   #
   start <- lubridate::date_decimal(start_year)
@@ -690,9 +749,72 @@ get_tariff_prices <- function(scen,start_year=2019,end_year=2040){
                                                                          tou=="day"~day_tariff_fun(scen,lubridate::decimal_date(datetime)),
                                                                          tou=="peak"~peak_tariff_fun(scen,lubridate::decimal_date(datetime))))
   dynamic <- dynamic_prices(sD,end_year) %>% dplyr::select(-regime)
+  #apply a price cap
+  cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
+  dynamic <- dynamic %>% dplyr::mutate(price_cap = cap_scale*flat_tariff_fun(sD,lubridate::decimal_date(datetime)))
+  dynamic <- dynamic %>% dplyr::mutate(price = pmin(price_cap, price)) %>% dplyr::select(-price_cap)
+
   dynamic$tariff_plan <- "dynamic"
-  dplyr::bind_rows(flat,tou,dynamic)
+  dplyr::bind_rows(flat,tou,dynamic) %>% dplyr::select(-tou)
 
 }
 
+
+#' flex_score_cube
+#'
+#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range phi, gamma, tau triples.
+#'
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+flex_score_cube <- function(){
+
+  #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
+  surface_model <- mgcv::gam(
+    flex_score ~ s(phi, gamma,tau, k = 15),
+    family = gaussian(link = "log"), # Forces non-negative predictions
+    data = flex_scores
+  )
+  # fine-graining
+  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 60)
+  gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 60)
+  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 20)
+
+  # Expand into a dense 2D grid matrix (40,000 points)
+  dense_grid <- tidyr::expand_grid(phi = phi_grid, gamma = gamma_grid,tau=tau_grid)
+
+  # Predict the continuous flex_scores across the entire surface
+  dense_grid$flex_score <- predict(surface_model, newdata = dense_grid, type = "response")
+  dense_grid %>% return()
+
+}
+
+#' match_flex_params
+#'
+#' This function returns a flexibility \eqn{gamma}, \eqn{phi} parameter pair give a value for the MAD load-shifting
+#' quantity x. Inflexible agents have zero loadshift MAD while highly flexible agents have loadshifting MAD of about 30%.\cr
+#' \cr
+#' The utility function flex_score_matrix() must be called before using this function (see examples). This recasts the data in
+#' flex_scores
+#'
+#' @param x target MAD loadshifting score
+#' @param score_cube flex parameter/score table
+#'
+#' @returns single row dataframe
+#' @export
+#'
+#' @examples
+#' score_cube <- flex_score_cube()
+#' match_flex_params(25.4,score_cube)
+#'
+match_flex_params <- function(x,score_cube){
+  #
+  tol <- 0.1
+  #coordinates of the contour line at height x
+  matching_triples <- score_cube %>% dplyr::filter(abs(flex_score - x) <= tol) %>% dplyr::select(phi, gamma,tau)
+  matching_triples %>% dplyr::slice_sample()
+
+}
 

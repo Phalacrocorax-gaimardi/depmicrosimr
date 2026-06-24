@@ -41,8 +41,8 @@ utilities. Agents evaluate the optimal electricity tariff plan. This includes a 
 }
 \examples{
 
-agents_in <- initialise_agents(sD,2019)
+prices_scen <- get_price_load_scen(sD)
+agents_in <- initialise_agents(sD,2019,prices_scen)
 social_network <- make_artificial_society(dep_society,homophily,nu=4.5)
-price_scen <- get_tariff_prices(sD)
 #agents_1 <- update_agents(sD,2026+1/6,agents_in,social_network,quiet=FALSE)
 }

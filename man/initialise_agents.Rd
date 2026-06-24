@@ -4,12 +4,14 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(sD, start_year = 2019)
+initialise_agents(sD, start_year = 2019, prices_scen)
 }
 \arguments{
 \item{sD}{scenario design dataframe}
 
 \item{start_year}{default 2019}
+
+\item{prices_scen}{tariff prices dataframe}
 }
 \value{
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
@@ -17,8 +19,12 @@ a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter
 \description{
 sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
 \cr
-14% of households are on the old (dual meter) day/night tariff.
+14% of households are on the old (dual meter) day/night tariff.\cr
+\cr
+3-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
+a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).
 }
 \examples{
-initialise_agents(sD,2019)
+prices_scen <- get_price_load_scen(sD)
+initialise_agents(sD,2019,prices_scen)
 }

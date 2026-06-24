@@ -8,7 +8,7 @@ get_flex(
   demand,
   phi = 0.5,
   gamma = 0.5,
-  eta = 0.1,
+  eta = 1,
   tau = 24,
   P_max = 10,
   precision = 1e-06
@@ -19,9 +19,9 @@ get_flex(
 
 \item{phi}{baseload (inflexible) fraction of load}
 
-\item{gamma}{the quandatric cost penalty weight}
+\item{gamma}{unscaled quandatric cost penalty weight}
 
-\item{eta}{weight of the kinetic term (regularisation)}
+\item{eta}{unscaled weight of the kinetic term (regularisation)}
 
 \item{tau}{flexibility time horizon in hours}
 
@@ -33,11 +33,26 @@ get_flex(
 a 2-column dataframe of datetime and perturbed load
 }
 \description{
-get_flex solves for the flexible load \eqn{L_t} that optimises the cost to a household over the period 1:T. With flat price,
-the household load is \eqn{L_t^0}. In addition, to
-the financial cost that depends on the prices \eqn{p(t)}
-the t with a kinetic regularisation term. The model is
-\deqn{C = \sum_{t=1}^T p_t L_t + \eta \sum_t (L_{t+1}-L_t)^2 + \gamma_t \sum_t \sum_k \exp(-|k|/\tau) \left(L_{t+k}-L_{t+k}\right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
-The constraint \eqn{\sum(L_t)=\sum(L_t^0)} is imposed i.e. total household energy consumption is inelastic.
+get_flex solves for the flexible load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
+the direct billing cost as well as penalties associated with load-shifting behaviour. get_flex() assumes that total consumption over the period 1:T is unchanged irrespective
+of prices \eqn{p(t)} \cr
 \cr
+The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price. Load-shifting behaviour may arise in response to varying prices \eqn{p_t}.
+The billing cost depends on the prices \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
+\deqn{C = \sum_{t=1}^T p_t L_t + \eta \sum_t (L_{t+1}-L_t)^2 + \gamma_\tau \sum_t \sum_k \exp(-|k|/\tau) \left(L_{t+k}-L_{t+k}^0\right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
+An additional constraint \eqn{\sum(L_t)=\sum(L_t^0)} is imposed i.e. total household energy consumption is inelastic.
+\cr
+The \eqn{\eta} term prevents excessive load-shifting in response to small differences in prices (regularisation). The \eqn{\gamma_\tau} term is permits
+is a stiffness term that limits load-shifting over a timescale \eqn{\tau} but inhibits it on longer timescales.\cr
+\cr
+The cost parameters  are defined for a standard annual load of 8760kWh. The scales inversely with the mean load and
+}
+\examples{
+
+demand <- load_profiles \%>\% dplyr::select(datetime,"lp1")
+demand <- demand \%>\% dplyr::mutate(datetime = update(datetime, year=2030))
+demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
+demand <- demand \%>\% dplyr::inner_join(get_tariff_prices(sD) \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price))
+get_flex(demand,phi=0.5,gamma=0.5,eta=1,tau=48)
+
 }

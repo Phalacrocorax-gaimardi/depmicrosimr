@@ -6,18 +6,21 @@
 #'
 #' sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
 #' \cr
-#' 14% of households are on the old (dual meter) day/night tariff.
-#'
-#'
+#' 14% of households are on the old (dual meter) day/night tariff.\cr
+#' \cr
+#' 3-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
+#' a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).
 #'
 #' @param sD scenario design dataframe
 #' @param start_year default 2019
+#' @param prices_scen tariff prices dataframe
 #'
 #' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
 #' @export
 #' @examples
-#' initialise_agents(sD,2019)
-initialise_agents <- function(sD, start_year=2019){
+#' prices_scen <- get_price_load_scen(sD)
+#' initialise_agents(sD,2019,prices_scen)
+initialise_agents <- function(sD, start_year=2019,prices_scen){
 
   #agents_in has a minimal set of survey data
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
@@ -30,7 +33,7 @@ initialise_agents <- function(sD, start_year=2019){
   agents_in <- agents_in %>% dplyr::mutate(q41 = replace(q41,q41 %in% c(3,4,5),1))
   #assume that 2/3 of day/night customers were on the old day/night rate in 2019
   agents_in <- agents_in %>% dplyr::mutate(q41 = replace(q41,sample(which(q41 == 2), floor(sum(q41 == 2) / 3)),1))
-  tous <- tibble::tibble(q41=c(1,2),tariff=c("flat","day/night/peak"))
+  tous <- tibble::tibble(q41=c(1,2),tariff=c("flat","tou"))
   agents_in <- agents_in %>% dplyr::inner_join(demand) %>% dplyr::inner_join(tous)
   county_codes <- dep_qanda %>% dplyr::filter(question_code=="qc1") %>% dplyr::rename("qc1"=response_code)
   county_codes <- county_codes %>% dplyr::rename("county"=response) %>% dplyr::select(qc1,county)
@@ -40,10 +43,41 @@ initialise_agents <- function(sD, start_year=2019){
   agents_in <- agents_in %>% dplyr::inner_join(area_codes) %>% dplyr::inner_join(county_codes)
   agents_in <- agents_in %>% dplyr::inner_join(smart_meter_rollout)
   #
-  agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff,yeartime)
+  agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff,yeartime,area)
   #combine with structural params
   agents_in <- agents_in %>% dplyr::inner_join(struct_params)
   #rollout year
+  #add flex params
+  agents_in$eta <- 1
+  #generate "flexibility scores" (hourly MAD load-shifting values) range from min_flex to max_flex%
+  min_flex <- sD %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)
+  max_flex <- sD %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)
+  #scale heterogeneous flexibilities to lie between min_flex and max_flex
+  agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
+  #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
+  #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
+  #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
+  #sample flexible parameter values based on flex_score
+  score_cube <- flex_score_cube()
+  agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score,score_cube)) %>% dplyr::ungroup()
+  #rescale eta and gamma parameters according to mean hourly demand
+  # reduced effect of quadratic
+  #agents_in <- agents_in %>% dplyr::mutate(eta=eta*(8760/kWh), gamma=gamma*(8760/kWh))
+  #rescale proactive: 0 to theta_max: theta_max very risk intolerant
+  theta_max <- sD %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
+  agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
+  #assign load profile codes : currently only a single profile
+  agents_in <- agents_in %>% dplyr::mutate(profile=dplyr::case_when(area=="Urban"&tariff=="flat"~"lp1",
+                                                                    area=="Urban"&tariff=="tou"~"lp2",
+                                                                    area=="Rural"&tariff=="flat"~"lp3",
+                                                                    area=="Rural"&tariff=="tou"~"lp4"))
+  agents_in <- agents_in %>% dplyr::select(-flexibility,-proactive,-inertia,-flex_score)
+  #current annual bills
+  #agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(annual_bill=get_annual_cost(2019,kWh,tariff,phi,gamma,eta,tau,"lp1",prices_scen)$annual_bill_flexible)
+  get_bill <- function(kWh, tariff, profile) {get_annual_cost_base(start_year,kWh,tariff,profile,prices_scen)}
+
+  agents_in <- agents_in <- agents_in  %>% dplyr::mutate(annual_bill = purrr::pmap_dbl(list(kWh, tariff, profile), get_bill))
+  #tidy up
   agents_in %>% return()
 }
 
@@ -68,9 +102,9 @@ initialise_agents <- function(sD, start_year=2019){
 #' @export
 #' @examples
 #'
-#' agents_in <- initialise_agents(sD,2019)
+#' prices_scen <- get_price_load_scen(sD)
+#' agents_in <- initialise_agents(sD,2019,prices_scen)
 #' social_network <- make_artificial_society(dep_society,homophily,nu=4.5)
-#' price_scen <- get_tariff_prices(sD)
 #' #agents_1 <- update_agents(sD,2026+1/6,agents_in,social_network,quiet=FALSE)
 
 update_agents <- function(sD,yeartime,agents_in, price_scen, social_network,ignore_social=F,quiet=TRUE){
@@ -87,7 +121,7 @@ update_agents <- function(sD,yeartime,agents_in, price_scen, social_network,igno
   a_s <- agents_in
   n_dynamic <- dim(a_s %>% dplyr::filter(tariff=="dynamic"))[1]
   #calculate current annual electricity cost
-  a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(eac = annualised_heating_system_cost(hli,tech,heating_install_time,"new",floor_area,house_type,construction_year,params,"None",include_rebound = FALSE))
+  #a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(bill = ,params,"None",include_rebound = FALSE))
   a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(eac_actual = annualised_heating_system_cost(hli,tech,heating_install_time,"new",floor_area,house_type,construction_year,params,"None",include_rebound = TRUE))
   #update definitions of old and new for all agents
   #a_s <- a_s %>% dplyr::mutate(S1_old=S1_new,S2_old = S2_new,B_old=B_new)

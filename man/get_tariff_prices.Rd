@@ -18,5 +18,9 @@ get_tariff_prices(scen, start_year = 2019, end_year = 2040)
 }
 \description{
 creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
-dynamic simulated prices set at the beginning of each model run (dyn_prices)
+The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run). A dynmaic price
+cap is
+}
+\examples{
+prices_scen <- get_tariff_prices(sD)
 }
