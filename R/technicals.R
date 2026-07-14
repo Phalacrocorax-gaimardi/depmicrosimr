@@ -28,13 +28,11 @@ scenario_params <- function(sD,yeartime){
   scen <- tibble::tibble(parameter="yeartime", value=  yeartime)
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dep_introduction", value=  dplyr::filter(sD, parameter=="dep_introduction")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="tou_introduction", value=  dplyr::filter(sD, parameter=="tou_introduction")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="flat_tariff", value=  flat_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_tariff", value=  day_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_tariff", value=  night_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_tariff", value=  peak_tariff_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dynamic_scale", value=  dynamic_scale_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_network_charge", value=  day_network_charge_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_network_charge", value=  night_network_charge_fun(sD,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_network_charge", value=  peak_network_charge_fun(sD,yeartime)))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge", value =  standing_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="beta.", value =  dplyr::filter(sD, parameter=="beta.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(sD, parameter=="nu.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(sD, parameter=="p.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(sD, parameter=="nu.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(sD, parameter=="rho.")$value))
@@ -248,117 +246,6 @@ peak_network_charge_fun <- function(sD,yeartime){
   approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
 }
 
-
-
-
-#' flat_tariff_fun
-#'
-#' all tou tariffs are driven by the flat rate.
-#'
-#' @param sD scenario dataframe
-#' @param yeartime decimal time
-#'
-#' @return price per kWh in euros
-#' @export
-#'
-#' @examples
-#' flat_tariff_fun(sD,2030)
-flat_tariff_fun <- function(sD,yeartime){
-  #
-  seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
-  #cost_2022 <- sD %>% dplyr::filter(parameter=="electricity_price_2022") %>% dplyr::pull(value)
-  values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
-  approx(x=c(seai_elec1$year+0.5,2030.5,2040.5), y=c(seai_elec1$price/100,values),xout=yeartime,rule=2)$y %>% return()
-}
-
-
-
-#' day_tariff_fun
-#'
-#' actual (currenly to mid 2023) and projected path of electricity prices. Data from seai_elec. For inflation expectations see electricity_price_inflation_fun.
-#'
-#' @param sD scenario dataframe
-#' @param yeartime decimal time
-#'
-#' @return price per kWh in euros
-#' @export
-#'
-#' @examples
-#' day_tariff_fun(sD,2030)
-day_tariff_fun <- function(sD,yeartime){
-
-  seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
-  #cost_2022 <- sD %>% dplyr::filter(parameter=="electricity_price_2022") %>% dplyr::pull(value)
-  ratios <- sD %>% dplyr::filter(parameter %in% c("day_flat_ratio","day_flat_ratio_2030","day_flat_ratio_2040")) %>% dplyr::pull(value)
-  values <- values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
-  approx(x=c(seai_elec1$year+0.5,2030.5,2050.5), y=c(seai_elec1$price/100*ratios[1],values*ratios[2:3]),xout=yeartime,rule=2)$y %>% return()
-}
-
-
-
-#' night_tariff_fun
-#'
-#' Night ToU tariffs. Historical rates are set at 45% of the day rate
-#'
-#' @param sD scenario dataframe
-#' @param yeartime decimal time
-#'
-#' @return price per kWh in euros
-#' @export
-#'
-#' @examples
-night_tariff_fun <- function(sD,yeartime){
-  #
-  seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
-  ratios <- sD %>% dplyr::filter(parameter %in% c("night_flat_ratio","night_flat_ratio_2030","night_flat_ratio_2040")) %>% dplyr::pull(value)
-  values <- values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
-  approx(x=c(seai_elec1$year+0.5,2030.5,2050.5), y=c(seai_elec1$price/100*ratios[1],values*ratios[2:3]),xout=yeartime,rule=2)$y %>% return()
-}
-
-#' peak_tariff_fun
-#'
-#' Peak 5-7pm ToU tariffs. Historical rates are set at 45% of the day rate
-#'
-#' @param sD scenario dataframe
-#' @param yeartime decimal time
-#'
-#' @return price per kWh in euros
-#' @export
-#'
-#' @examples
-#' peak_tariff_fun(sD,2028.7)
-peak_tariff_fun <- function(sD,yeartime){
-  #
-  seai_elec1 <- seai_elec %>% dplyr::filter(year >=2008) #add more costs here if known
-  ratios <- sD %>% dplyr::filter(parameter %in% c("peak_flat_ratio","peak_flat_ratio_2030","peak_flat_ratio_2040")) %>% dplyr::pull(value)
-  values <- values <- sD %>% dplyr::filter(parameter %in% c("flat_tariff_2030","flat_tariff_2040")) %>% dplyr::pull(value)
-  approx(x=c(seai_elec1$year+0.5,2030.5,2050.5), y=c(seai_elec1$price/100*ratios[1],values*ratios[2:3]),xout=yeartime,rule=2)$y %>% return()
-}
-
-
-#' dynamic_scale_fun
-#'
-#' Assumes that the dynamic pricing tariff at yeartime is
-#' \deqn{p_{dynamic}=scale \times p_{wholesale}}
-#' Historically, the retail tariffs are about three times the wholesale price
-#'
-#' @param sD input scenario
-#' @param yeartime decimal time
-#'
-#' @returns
-#' @export
-#'
-#' @examples
-#' dynamic_scale_fun(sD,2034.5)
-#'
-dynamic_scale_fun <- function(sD,yeartime){
-
-  ratios <- sD %>% dplyr::filter(parameter %in% c("dynamic_tariff_scale","dynamic_tariff_scale_2030","dynamic_tariff_scale_2040")) %>% dplyr::pull(value)
-  approx(x=c(2026.5,2030.5,2050.5), y=c(ratios),xout=yeartime,rule=2)$y %>% return()
-
-}
-
-
 #' standing_charge_fun
 #'
 #' household standing charge (expectations & historical). The current model assumes that the standing charge
@@ -482,132 +369,21 @@ generate_logprice_hmm <- function(dcmp,n_states=3,winsor=0.01){
   return(fit_model)
 }
 
-#' simulate_prices
+#' dynamic_prices
 #'
-#' This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
+#' returns a simulation of sem electricity prices to end_year. The period 2019-2025 uses historic prices. \cr
+#' \cr
+#' This is based on the wholesale price decomposition in sem_logprices_2019_2025_decomp for observed seasonality (daily, weekly and annual),
+#' and the pre-fit gaussian HMM for logprice residuals. Projections are based on trend price scenarios for 2030 and 2040.\cr
+#' \cr
+#' #' This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
 #' \cr
 #' The projections derive from the product of three factors - a price trend, a seasonal component, and a hidden markov gaussian noise components. Thus
 #' projections reflect heteroskedasticity of electricity prices and and is achieved through a log-type transformation of the price data.
 #' \cr
 #' In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
 #' a log transformation for prices greater than \eqn{scale}.
-#'
-#' @param dcmp decomposed logprice output from decompose_logprices()
-#' @param fit_hmm the HMM fit to residuals from generate_logprice_hmm()
-#' @param end_year the last year of the price simulation
-#' @param trend_price_2030 the trend SEM `price at the end of 2030
-#' @param trend_price_2040 the trend SEM price at the end of 2040
-#' @param drop_hmm option to drop the residuals
-#' @param drop_season option to drop the seasonal components
-#'
-#' @returns
-#' @export
-#'
-#' @examples
-#' dcmp <- decompose_logprices(sem_prices_2023_2025)
-#' fit_hmm <- generate_logprice_hmm(dcmp,n_state=3)
-#' simulate_prices(dcmp,fit_hmm, trend_price_2030=150, trend_price_2040=200)
-#'
-simulate_prices <- function(dcmp,fit_hmm, end_year=2040, trend_price_2030,trend_price_2040, drop_hmm=FALSE,drop_season=FALSE){
-  #
-  scale0 <- sD %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
-  t1 <- lubridate::ymd_hms("2026-01-01 00:00:00", tz = "UTC")
-  t2 <- lubridate::ymd_hms(paste(end_year,"-12-31 23:00:00", tz = "UTC", sep=""))
-  # 2. Generate the hourly equence using base R's seq() with lubridate's hours(1)
-  hourly_sequence <- seq(from = t1, to = t2, by = "1 hour")
 
-  sim_length <- length(hourly_sequence)
-  dummy_df <- data.frame(detrended = rep(0, sim_length))
-
-  #new model framework
-  n_states <- fit_hmm@nstates
-  extended_model <- depmixS4::depmix(detrended ~ 1, nstates = n_states, data = dummy_df)
-  #copy the fitted parameters
-  extended_model <- depmixS4::setpars(extended_model, depmixS4::getpars(fit_hmm))
-  #
-  sim <- depmixS4::simulate(extended_model, nsim = 1)
-  # Extract your new long series
-  sim_series <- sim@response[[1]][[1]]@y[,1]
-  #sim_states <- sim@states
-  # sim_data now contains:
-  # 1. The sequence of "Hidden States" (State 1, 2, or 3)
-  # 2. The "Observed" synthetic prices
-  sim_logprices <-  tibble::tibble(datetime=hourly_sequence,sim=sim_series)
-  #seasonal factors
-  daily_lookup <- dcmp %>% tibble::as_tibble() %>%
-    # Identify unique hour of the week (1 to 24)
-    dplyr::mutate(hour_of_day = lubridate::hour(datetime)+1)  %>%
-    dplyr::group_by(hour_of_day) %>%
-    dplyr::summarise(season_daily = dplyr::first(season_day), .groups = "drop")
-
-
-  weekly_lookup <- dcmp %>% tibble::as_tibble() %>%
-    # Identify unique hour of the week (1 to 168)
-    dplyr::mutate(hour_of_week = (lubridate::wday(datetime) - 1) * 24 + lubridate::hour(datetime) + 1) %>%
-    dplyr::group_by(hour_of_week) %>%
-    dplyr::summarise(season_weekly = dplyr::first(season_week), .groups = "drop")
-
-  annual_lookup <- dcmp %>%
-    tibble::as_tibble() %>%
-    # Identify unique hour of the year (approx 1 to 8766)
-    dplyr::mutate(
-      # Use yday * 24 + hour to track the exact solar timeline position
-      hour_of_year = (lubridate::yday(datetime) - 1) * 24 + lubridate::hour(datetime) + 1
-    ) %>%
-    dplyr::group_by(hour_of_year) %>%
-    dplyr::summarise(season_annual = dplyr::first(season_year), .groups = "drop")
-  #
-  seasonal_logprices <- tibble::tibble(datetime=hourly_sequence) %>%
-    # Calculate index keys for the future timestamps
-    dplyr::mutate(
-      hour_of_day = lubridate::hour(datetime)+1,
-      hour_of_week = (lubridate::wday(datetime) - 1) * 24 + lubridate::hour(datetime) + 1,
-      hour_of_year = (lubridate::yday(datetime) - 1) * 24 + lubridate::hour(datetime) + 1
-    ) %>%
-    # Left join the master lookup profiles
-    dplyr::left_join(daily_lookup, by = "hour_of_day") %>%
-    dplyr::left_join(weekly_lookup, by = "hour_of_week") %>%
-    dplyr::left_join(annual_lookup, by = "hour_of_year") %>%
-    # If a leap year creates an unmapped hour_of_year = 8784,
-    # use tidyr::fill() or safely fallback to the closest winter profile
-    tidyr::fill(season_annual, .direction = "down") %>%
-    # Combine them into your total additive seasonal adjustment
-    dplyr::mutate(
-      season = season_weekly + season_annual + season_daily
-    ) %>% dplyr::select(datetime, season)
-  #price trend
-  trend_logprices <- tibble::tibble(datetime=hourly_sequence,trend=NA)
-  trend_price_2026 <- dcmp %>% dplyr::filter(datetime=="2025-12-01 23:00:00") %>% dplyr::pull(trend)
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2026-01-01 00:00:00",trend_price_2026))
-  #wholesale price 100
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2030-12-31 23:00:00",asinh(trend_price_2030/scale0)))
-  #wholesale price 200
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2040-12-31 23:00:00",asinh(trend_price_2040/scale0)))
-  #linearly interp
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
-
-  sim_logprices <- sim_logprices %>% dplyr::inner_join(trend_logprices) %>% dplyr::inner_join(seasonal_logprices)
-
-  if(!drop_hmm & !drop_season) sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)) %>% dplyr::select(datetime,price)
-  if(drop_hmm & !drop_season) sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(trend+season)) %>% dplyr::select(datetime,price)
-  if(!drop_hmm & drop_season) sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(trend+sim)) %>% dplyr::select(datetime,price)
-  if(drop_hmm & drop_season) sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(trend)) %>% dplyr::select(datetime,price)
-
-  sim_prices$regime <- "simulated"
-  hist <- dcmp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
-  hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)) %>% dplyr::select(-logprice)
-  hist %>% dplyr::bind_rows(sim_prices)
-
-}
-
-#' dynamic_prices
-#'
-#' returns a simulation of retail dynamic electricity prices to end_year. \cr
-#' \cr
-#' This is based on the wholesale price decomposition in sem_logprices_2019_2025_decomp for observed seasonality (daily, weekly and annual),
-#' and the pre-fit gaussian HMM for logprice residuals. Projections are based on trend price scenarios for 2030 and 2040.\cr
-#' \cr
-#' This is joined to counterfactual retail electricity prices
 #' pre 2026
 #'
 #' @param scen scenario
@@ -617,6 +393,7 @@ simulate_prices <- function(dcmp,fit_hmm, end_year=2040, trend_price_2030,trend_
 #' @export
 #'
 #' @examples
+#' dynamic_prices(sD)
 dynamic_prices <- function(scen,end_year=2040){
   #
   scale0 <- sD %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
@@ -687,20 +464,16 @@ dynamic_prices <- function(scen,end_year=2040){
   ###########
   #trend prices
   ############
-  dynamic_tariff_scale <- scen %>% dplyr::filter(parameter=="dynamic_tariff_scale") %>% dplyr::pull(value)
-
-  dynamic_tariff_scale_2030 <- scen %>% dplyr::filter(parameter=="dynamic_tariff_scale_2030") %>% dplyr::pull(value)
-  trend_price_2030 <- flat_tariff_fun(scen,2030)/dynamic_tariff_scale_2030*1000
-  dynamic_tariff_scale_2040 <- scen %>% dplyr::filter(parameter=="dynamic_tariff_scale_2030") %>% dplyr::pull(value)
-  trend_price_2040 <- flat_tariff_fun(scen,2040)/dynamic_tariff_scale_2040*1000
+  sem_trend_price_2030 <- scen %>% dplyr::filter(parameter=="sem_price_2030") %>% dplyr::pull(value)*1000
+  sem_trend_price_2040 <- scen %>% dplyr::filter(parameter=="sem_price_2040") %>% dplyr::pull(value)*1000
 
   trend_logprices <- tibble::tibble(datetime=hourly_sequence,trend=NA)
-  trend_price_2026 <- sem_logprices_2019_2025_decomp %>% dplyr::filter(datetime=="2025-12-01 23:00:00") %>% dplyr::pull(trend)
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2026-01-01 00:00:00",trend_price_2026))
+  trend_logprice_2026 <- sem_logprices_2019_2025_decomp %>% dplyr::filter(datetime=="2025-12-01 23:00:00") %>% dplyr::pull(trend)
+  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2026-01-01 00:00:00",trend_logprice_2026))
   #wholesale price 100
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2030-12-31 23:00:00",asinh(trend_price_2030/scale0)))
+  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2030-12-31 23:00:00",asinh(sem_trend_price_2030/scale0)))
   #wholesale price 200
-  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2040-12-31 23:00:00",asinh(trend_price_2040/scale0)))
+  trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2040-12-31 23:00:00",asinh(sem_trend_price_2040/scale0)))
   #linearly interp
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
 
@@ -709,9 +482,8 @@ dynamic_prices <- function(scen,end_year=2040){
   sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)/1000) %>% dplyr::select(datetime,price)
   sim_prices$regime <- "simulated"
   #scale all price by dynamic scale
-  sim_prices <- sim_prices %>% dplyr::mutate(price = price*dynamic_scale_fun(scen,lubridate::decimal_date(datetime)))
   hist <- sem_logprices_2019_2025_decomp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
-  hist <- hist %>% dplyr::mutate(price= dynamic_tariff_scale*scale0*sinh(logprice)/1000) %>% dplyr::select(-logprice)
+  hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)/1000) %>% dplyr::select(-logprice)
   hist %>% dplyr::bind_rows(sim_prices)
 
 }
@@ -719,9 +491,8 @@ dynamic_prices <- function(scen,end_year=2040){
 #dyn <- simulate_prices(dcmp,hmm_fit, trend_price_2030=trend_price_2030, trend_price_2040=trend_price_2040)
 
 
-#
 
-#' get_tariff_prices
+#' get_sem_prices
 #'
 #' creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
 #' The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run). A dynmaic price
@@ -735,8 +506,8 @@ dynamic_prices <- function(scen,end_year=2040){
 #' @export
 #'
 #' @examples
-#' prices_scen <- get_tariff_prices(sD)
-get_tariff_prices <- function(scen,start_year=2019,end_year=2040){
+#' prices_scen <- get_sem_prices(sD)
+get_sem_prices <- function(scen,start_year=2019,end_year=2040){
   #
   start <- lubridate::date_decimal(start_year)
   end <- lubridate::date_decimal(end_year+1)
@@ -744,47 +515,43 @@ get_tariff_prices <- function(scen,start_year=2019,end_year=2040){
   tou <- tou_tariffs %>% dplyr::rename("hour"=start) %>% dplyr::rename("tou"=tariff) %>% dplyr::select(-end)
   ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou) %>% dplyr::select(-hour)
 
-  flat <- ts %>% dplyr::mutate(tariff_plan="flat",price = flat_tariff_fun(scen,lubridate::decimal_date(datetime)))
-  tou <- ts %>% dplyr::mutate(tariff_plan="tou",price = dplyr::case_when(tou=="night"~night_tariff_fun(scen,lubridate::decimal_date(datetime)),
-                                                                         tou=="day"~day_tariff_fun(scen,lubridate::decimal_date(datetime)),
-                                                                         tou=="peak"~peak_tariff_fun(scen,lubridate::decimal_date(datetime))))
   dynamic <- dynamic_prices(sD,end_year) %>% dplyr::select(-regime)
-  #apply a price cap
-  cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
-  dynamic <- dynamic %>% dplyr::mutate(price_cap = cap_scale*flat_tariff_fun(sD,lubridate::decimal_date(datetime)))
-  dynamic <- dynamic %>% dplyr::mutate(price = pmin(price_cap, price)) %>% dplyr::select(-price_cap)
+  ts %>% dplyr::inner_join(dynamic)
+  #impose a price cap
+  #cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
+  #dynamic <- dynamic %>% dplyr::mutate(price_cap = cap_scale*flat_tariff_fun(sD,lubridate::decimal_date(datetime)))
+  #dynamic <- dynamic %>% dplyr::mutate(price = pmin(price_cap, price)) %>% dplyr::select(-price_cap)
 
-  dynamic$tariff_plan <- "dynamic"
-  dplyr::bind_rows(flat,tou,dynamic) %>% dplyr::select(-tou)
+  #dynamic$tariff_plan <- "dynamic"
 
 }
 
 
 #' flex_score_cube
 #'
-#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range phi, gamma, tau triples.
+#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
 #'
-#'
+#' @param eta eta parameter assumption
 #' @returns
 #' @export
 #'
 #' @examples
-flex_score_cube <- function(){
+#' flex_score_cube()
+flex_score_cube <- function(eta=0.2){
 
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
-    flex_score ~ s(phi, gamma,tau, k = 15),
+    flex_hour ~ s(phi, gamma,tau, k = 15),
     family = gaussian(link = "log"), # Forces non-negative predictions
-    data = flex_scores
+    data = flex_scores %>% dplyr::filter(tariff_plan=="tou",eta==.$eta) %>% dplyr::select(phi,gamma,tau,flex_hour)
   )
   # fine-graining
-  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 60)
-  gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 60)
-  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 20)
+  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 80)
+  gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 80)
+  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 50)
 
   # Expand into a dense 2D grid matrix (40,000 points)
   dense_grid <- tidyr::expand_grid(phi = phi_grid, gamma = gamma_grid,tau=tau_grid)
-
   # Predict the continuous flex_scores across the entire surface
   dense_grid$flex_score <- predict(surface_model, newdata = dense_grid, type = "response")
   dense_grid %>% return()
@@ -793,13 +560,15 @@ flex_score_cube <- function(){
 
 #' match_flex_params
 #'
-#' This function returns a flexibility \eqn{gamma}, \eqn{phi} parameter pair give a value for the MAD load-shifting
+#' This function returns a flexibility \eqn{gamma,tau,phi} parameter triple give a value for the MAD load-shifting
 #' quantity x. Inflexible agents have zero loadshift MAD while highly flexible agents have loadshifting MAD of about 30%.\cr
 #' \cr
 #' The utility function flex_score_matrix() must be called before using this function (see examples). This recasts the data in
-#' flex_scores
+#' flex_scores.\cr
+#' For ToU parameter inference tau is set at
 #'
-#' @param x target MAD loadshifting score
+#'
+#' @param x target MAD loadshifting score defined as MAD hourly dev
 #' @param score_cube flex parameter/score table
 #'
 #' @returns single row dataframe
@@ -818,3 +587,20 @@ match_flex_params <- function(x,score_cube){
 
 }
 
+
+#' roundr
+#'
+#' stochastic round
+#' @param x real
+#'
+#' @returns integer
+#' @export
+#'
+#' @examples
+#' replicate(100,roundr(2.5)) |> mean()
+roundr <- function (x)
+{
+  x1 <- trunc(x)
+  weights = c(1 + x1 - x, x - x1)
+  return(sample(c(x1, x1 + 1), size = 1, prob = weights))
+}

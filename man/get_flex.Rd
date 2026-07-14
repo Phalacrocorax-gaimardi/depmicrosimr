@@ -4,15 +4,7 @@
 \alias{get_flex}
 \title{get_flex}
 \usage{
-get_flex(
-  demand,
-  phi = 0.5,
-  gamma = 0.5,
-  eta = 1,
-  tau = 24,
-  P_max = 10,
-  precision = 1e-06
-)
+get_flex(demand, phi = 0.5, gamma = 0.5, eta = 1, tau = 24, precision = 0.001)
 }
 \arguments{
 \item{demand}{a 3 column dataframe of datetime, hourly prices and natural_load}
@@ -24,8 +16,6 @@ get_flex(
 \item{eta}{unscaled weight of the kinetic term (regularisation)}
 
 \item{tau}{flexibility time horizon in hours}
-
-\item{P_max}{the maximum permitted load}
 
 \item{precision}{desired solver precision}
 }
@@ -49,10 +39,11 @@ The cost parameters  are defined for a standard annual load of 8760kWh. The scal
 }
 \examples{
 
-demand <- load_profiles \%>\% dplyr::select(datetime,"lp1")
-demand <- demand \%>\% dplyr::mutate(datetime = update(datetime, year=2030))
+demand <- set_prices(sD)
+demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
+demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
 demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
-demand <- demand \%>\% dplyr::inner_join(get_tariff_prices(sD) \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price))
-get_flex(demand,phi=0.5,gamma=0.5,eta=1,tau=48)
-
+demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
+test <- get_flex(demand,phi=0.5,gamma=1,eta=1,tau=48)
+100*mad((test$load_opt/test$load-1))
 }

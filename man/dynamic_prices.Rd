@@ -15,11 +15,20 @@ dynamic_prices(scen, end_year = 2040)
 dataframe with columns datetime, price (euros/kWh)
 }
 \description{
-returns a simulation of retail dynamic electricity prices to end_year. \cr
+returns a simulation of sem electricity prices to end_year. The period 2019-2025 uses historic prices. \cr
 \cr
 This is based on the wholesale price decomposition in sem_logprices_2019_2025_decomp for observed seasonality (daily, weekly and annual),
 and the pre-fit gaussian HMM for logprice residuals. Projections are based on trend price scenarios for 2030 and 2040.\cr
 \cr
-This is joined to counterfactual retail electricity prices
+#' This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
+\cr
+The projections derive from the product of three factors - a price trend, a seasonal component, and a hidden markov gaussian noise components. Thus
+projections reflect heteroskedasticity of electricity prices and and is achieved through a log-type transformation of the price data.
+\cr
+In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
+a log transformation for prices greater than \eqn{scale}.
 pre 2026
+}
+\examples{
+dynamic_prices(sD)
 }

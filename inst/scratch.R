@@ -779,6 +779,35 @@ load_profile3 <- load_profile %>% mutate(datetime = datetime %m-% years(3))
 load_profile <- bind_rows(load_profile1,load_profile2,load_profile3) %>% arrange(datetime)
 #write_csv(load_profile, "~/Policy/CAMG/Dynamic Pricing/Load_profiles/LP3.csv")
 
+#more profiles
+load_profile <-  readxl::read_xlsx("~/Policy/CAMG/Dynamic Pricing/Load_profiles/load-profiles-indexes-2020.xlsx",sheet="LP1",range="A5:CT371")
+start <- as.POSIXct("2024-01-01 00:15:00")
+end   <- as.POSIXct("2024-01-02 00:00:00")
+
+# Use "15 min" as the increment
+q_hours <- seq(from = start, to = end, by = "15 min")
+names(load_profile)[3:98] <- format(q_hours, "%H:%M")
+load_profile <- load_profile %>% pivot_longer(cols=c(-`Day Notes`,-Date), names_to="time",values_to="kWh")
+load_profile <- load_profile %>% mutate(datetime = ymd_hm(str_glue("{Date} {time}"))) %>% dplyr::select(datetime,kWh, `Day Notes`)
+#
+#
+load_profile <- load_profile %>% group_by(datetime=floor_date(datetime, "1 hour"),`Day Notes`) %>% summarise(kWh=sum(kWh))
+# extend to year 2023-2025
+load_profile1 <- load_profile %>% mutate(datetime = datetime %m-% years(1))
+load_profile2 <- load_profile %>% mutate(datetime = datetime %m-% years(2))
+load_profile3 <- load_profile %>% mutate(datetime = datetime %m-% years(3))
+load_profile <- bind_rows(load_profile1,load_profile2,load_profile3) %>% arrange(datetime)
+#write_csv(load_profile, "~/Policy/CAMG/Dynamic Pricing/Load_profiles/LP1_2020.csv")
+load_profile_2026 <- read_csv("~/Policy/CAMG/Dynamic Pricing/Load_profiles/LP1.csv")
+load_profile_2026 <- load_profile_2026 %>% mutate(datetime = datetime %m-% years(6))
+load_profile_2026 <- load_profile_2026 %>% rename("kWh_2026"=kWh)
+load_profile <- load_profile %>% rename("kWh_2020"=kWh)
+load_profile_2020 <- load_profile %>% mutate(kWh_2020=zoo::na.approx(kWh_2020))
+load_profile_2026 <- load_profile_2026 %>% rename("kWh_2026"=kWh)
+diff <- load_profile_2020 %>% select(-`Day Notes`) %>% full_join(load_profile_2026 %>% select(-`Day Notes`))
+diff <- diff %>% mutate(diff=kWh_2026-kWh_2020) %>% filter(date(datetime)!="2020-02-29")
+g1 <- diff %>% ggplot(aes(datetime,100*(kWh_2026-kWh_2020)/kWh_2020))+geom_line()
+
 
 #################################################
 ##########################################

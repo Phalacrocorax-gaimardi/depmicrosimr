@@ -25,6 +25,6 @@ sets the initial state variables at the beginning of each run (Jan 2019 before s
 a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).
 }
 \examples{
-prices_scen <- get_price_load_scen(sD)
+prices_scen <- set_prices(sD)
 initialise_agents(sD,2019,prices_scen)
 }

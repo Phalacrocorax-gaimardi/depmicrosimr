@@ -5,23 +5,23 @@
 \title{update_agents}
 \usage{
 update_agents(
-  sD,
+  scen,
   yeartime,
   agents_in,
-  price_scen,
+  prices_scen,
   social_network,
   ignore_social = F,
   quiet = TRUE
 )
 }
 \arguments{
-\item{sD}{scenario dataframe}
+\item{scen}{scenario dataframe}
 
 \item{yeartime}{decimal time}
 
 \item{agents_in}{input agent dataframe}
 
-\item{price_scen}{tariff plan price assumptions}
+\item{prices_scen}{tariff plan price assumptions}
 
 \item{social_network}{artificial social network}
 
@@ -41,8 +41,8 @@ utilities. Agents evaluate the optimal electricity tariff plan. This includes a 
 }
 \examples{
 
-prices_scen <- get_price_load_scen(sD)
+prices_scen <- set_prices(sD)
 agents_in <- initialise_agents(sD,2019,prices_scen)
-social_network <- make_artificial_society(dep_society,homophily,nu=4.5)
-#agents_1 <- update_agents(sD,2026+1/6,agents_in,social_network,quiet=FALSE)
+social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+#agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
 }

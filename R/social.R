@@ -3,7 +3,6 @@
 #
 #############################
 
-
 #' make_artificial_society
 #'
 #' Creates a homophilous social influence network based on demographic attributes contained in *dep_society* and

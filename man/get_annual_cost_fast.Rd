@@ -7,12 +7,12 @@
 get_annual_cost_fast(
   yeartime,
   kWh,
-  tariff,
+  tariff_plan,
   phi = 0.5,
   gamma = 0.25,
   eta = 0.1,
   tau = 24,
-  profile = "LP1",
+  natural_profile = "LP1",
   prices_scen
 )
 }
@@ -21,7 +21,7 @@ get_annual_cost_fast(
 
 \item{kWh}{annual consumption kWh (assumed inflexible)}
 
-\item{tariff}{flat, tou or dynamic}
+\item{tariff_plan}{flat, tou or dynamic}
 
 \item{phi}{inflexible fraction}
 
@@ -31,7 +31,7 @@ get_annual_cost_fast(
 
 \item{tau}{energy consumption mean reversion time}
 
-\item{profile}{household usage profile e.g. LP1}
+\item{natural_profile}{characteristic household usage profile e.g. LP1}
 
 \item{prices_scen}{tariff price scenario}
 }
@@ -46,7 +46,7 @@ are typically the output of get_tariff_prices(scenario)
 }
 \examples{
 
-prices_scen <- get_price_load_scen(sD)
-get_annual_cost_fast(2030,4000,"tou",phi=0.5,gamma=10,eta=0.1,tau=96,prices_scen=prices_scen)
-
+prices_scen <- set_prices(sD)
+get_annual_cost_fast(2026,8760,"tou",phi=0.5,gamma=1,eta=1,tau=48,natural_profile="LP1",prices_scen=prices_scen)
+get_annual_cost_fast(2026,8760,"tou",phi=0.5,gamma=1,eta=1,tau=48,natural_profile="LP3",prices_scen=prices_scen)
 }

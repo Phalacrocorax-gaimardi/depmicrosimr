@@ -7,7 +7,7 @@
 match_flex_params(x, score_cube)
 }
 \arguments{
-\item{x}{target MAD loadshifting score}
+\item{x}{target MAD loadshifting score defined as MAD hourly dev}
 
 \item{score_cube}{flex parameter/score table}
 }
@@ -15,11 +15,12 @@ match_flex_params(x, score_cube)
 single row dataframe
 }
 \description{
-This function returns a flexibility \eqn{gamma}, \eqn{phi} parameter pair give a value for the MAD load-shifting
+This function returns a flexibility \eqn{gamma,tau,phi} parameter triple give a value for the MAD load-shifting
 quantity x. Inflexible agents have zero loadshift MAD while highly flexible agents have loadshifting MAD of about 30%.\cr
 \cr
 The utility function flex_score_matrix() must be called before using this function (see examples). This recasts the data in
-flex_scores
+flex_scores.\cr
+For ToU parameter inference tau is set at
 }
 \examples{
 score_cube <- flex_score_cube()

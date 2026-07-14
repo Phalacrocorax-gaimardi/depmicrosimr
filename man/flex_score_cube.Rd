@@ -4,8 +4,14 @@
 \alias{flex_score_cube}
 \title{flex_score_cube}
 \usage{
-flex_score_cube()
+flex_score_cube(eta = 0.2)
+}
+\arguments{
+\item{eta}{eta parameter assumption}
 }
 \description{
-utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range phi, gamma, tau triples.
+utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
+}
+\examples{
+flex_score_cube()
 }
