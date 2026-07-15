@@ -4,10 +4,10 @@
 \alias{night_network_charge_fun}
 \title{night_network_charge_fun}
 \usage{
-night_network_charge_fun(sD, yeartime)
+night_network_charge_fun(scen, yeartime)
 }
 \arguments{
-\item{sD}{scenario dataframe}
+\item{scen}{scenario dataframe}
 
 \item{yeartime}{decimal time}
 }

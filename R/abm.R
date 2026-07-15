@@ -157,7 +157,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   b_s <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-savings)
 
   b_s$profile <- "computed"
-  #update agents
+  #update agents with switchers
   a_s <- dplyr::filter(a_s, !(serial %in% b_s$serial))
   a_s <- dplyr::bind_rows(a_s,b_s) %>% dplyr::arrange(serial)
   a_s <- a_s %>% dplyr::mutate(dep_adopter=(tariff_plan=="dynamic"))

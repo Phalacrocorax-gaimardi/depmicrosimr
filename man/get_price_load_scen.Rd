@@ -4,10 +4,10 @@
 \alias{get_price_load_scen}
 \title{get_price_load_scen}
 \usage{
-get_price_load_scen(sD, start_year = 2019, end_year = 2040)
+get_price_load_scen(scen, start_year = 2019, end_year = 2040)
 }
 \arguments{
-\item{sD}{scenario}
+\item{scen}{scenario}
 
 \item{start_year}{initial year}
 
@@ -19,7 +19,7 @@ dataframe
 \description{
 generates a data frame of hourly prices and load profiles from start_year to end_year\cr
 \cr
-get_price_load_scen() can be run once at the beginning of each ABM run to generate new dynamic prices
+get_price_load_scen() is called by set_prices()
 }
 \examples{
 get_price_load_scen(sD)

@@ -4,10 +4,10 @@
 \alias{scenario_params}
 \title{scenario_params}
 \usage{
-scenario_params(sD, yeartime)
+scenario_params(scenario, yeartime)
 }
 \arguments{
-\item{sD}{scenario parameters e.g. scenario_0}
+\item{scenario}{scenario parameters e.g. scenario_0}
 
 \item{yeartime}{decimal time}
 }
@@ -15,7 +15,7 @@ scenario_params(sD, yeartime)
 long form dataframe containing parameter names and values
 }
 \description{
-builds the complete parameter set at yeartime from scenario sD
+builds the complete parameter set at yeartime from scenario scen
 }
 \examples{
 params <- scenario_params(sD,2026)

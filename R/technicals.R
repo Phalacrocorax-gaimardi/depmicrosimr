@@ -13,9 +13,9 @@
 
 #' scenario_params
 #'
-#' builds the complete parameter set at yeartime from scenario sD
+#' builds the complete parameter set at yeartime from scenario scen
 #'
-#' @param sD scenario parameters e.g. scenario_0
+#' @param scenario scenario parameters e.g. scenario_0
 #' @param yeartime decimal time
 #'
 #' @return long form dataframe containing parameter names and values
@@ -23,21 +23,23 @@
 #'
 #' @examples
 #' params <- scenario_params(sD,2026)
-scenario_params <- function(sD,yeartime){
+scenario_params <- function(scenario,yeartime){
   #fast params
   scen <- tibble::tibble(parameter="yeartime", value=  yeartime)
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dep_introduction", value=  dplyr::filter(sD, parameter=="dep_introduction")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="tou_introduction", value=  dplyr::filter(sD, parameter=="tou_introduction")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_network_charge", value=  day_network_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_network_charge", value=  night_network_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_network_charge", value=  peak_network_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge", value =  standing_charge_fun(sD,yeartime)))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(sD, parameter=="nu.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(sD, parameter=="p.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(sD, parameter=="nu.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(sD, parameter=="rho.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="delta.", value =  dplyr::filter(sD, parameter=="delta.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="s.", value =  dplyr::filter(sD, parameter=="s.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="dep_introduction", value=  dplyr::filter(scenario, parameter=="dep_introduction")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="tou_introduction", value=  dplyr::filter(scenario, parameter=="tou_introduction")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="day_network_charge", value=  day_network_charge_fun(scenario,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="night_network_charge", value=  night_network_charge_fun(scenario,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_network_charge", value=  peak_network_charge_fun(scenario,yeartime)))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_flat", value =  standing_charge_fun(scenario,yeartime,"flat")))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_tou", value =  standing_charge_fun(scenario,yeartime,"tou")))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_dyn", value =  standing_charge_fun(scenario,yeartime,"dyn")))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(scenario, parameter=="p.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(scenario, parameter=="rho.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="delta.", value =  dplyr::filter(scenario, parameter=="delta.")$value))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="s.", value =  dplyr::filter(scenario, parameter=="s.")$value))
 
 
   #return(scen)
@@ -195,7 +197,7 @@ get_demand_params <- function(highest_kwh,lowest_kwh,lag_D = 30){
 #'
 #' Night network base price.
 #'
-#' @param sD scenario dataframe
+#' @param scen scenario dataframe
 #' @param yeartime decimal time
 #'
 #' @return price per kWh in euros
@@ -203,9 +205,9 @@ get_demand_params <- function(highest_kwh,lowest_kwh,lag_D = 30){
 #'
 #' @examples
 #' night_network_charge_fun(sD,2028.6)
-night_network_charge_fun <- function(sD,yeartime){
+night_network_charge_fun <- function(scen,yeartime){
   #
-  charges <- sD %>% dplyr::filter(parameter %in% c("night_network_charge_2020","night_network_charge_2026","night_network_charge_2030","night_network_charge_2040")) %>% dplyr::pull(value)
+  charges <- scen %>% dplyr::filter(parameter %in% c("night_network_charge_2020","night_network_charge_2026","night_network_charge_2030","night_network_charge_2040")) %>% dplyr::pull(value)
   approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
 }
 
@@ -213,7 +215,7 @@ night_network_charge_fun <- function(sD,yeartime){
 #'
 #' day network base price.
 #'
-#' @param sD scenario dataframe
+#' @param scen scenario dataframe
 #' @param yeartime decimal time
 #'
 #' @return price per kWh in euros
@@ -221,9 +223,9 @@ night_network_charge_fun <- function(sD,yeartime){
 #'
 #' @examples
 #' day_network_charge_fun(sD,2028.6)
-day_network_charge_fun <- function(sD,yeartime){
+day_network_charge_fun <- function(scen,yeartime){
   #
-  charges <- sD %>% dplyr::filter(parameter %in% c("day_network_charge_2020","day_network_charge_2026","day_network_charge_2030","day_network_charge_2040")) %>% dplyr::pull(value)
+  charges <- scen %>% dplyr::filter(parameter %in% c("day_network_charge_2020","day_network_charge_2026","day_network_charge_2030","day_network_charge_2040")) %>% dplyr::pull(value)
   approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
 }
 
@@ -232,7 +234,7 @@ day_network_charge_fun <- function(sD,yeartime){
 #'
 #' peak network charges + supplier ToU uplift. The base price of dynamic pricing.
 #'
-#' @param sD scenario dataframe
+#' @param scen scenario dataframe
 #' @param yeartime decimal time
 #'
 #' @return price per kWh in euros
@@ -240,32 +242,37 @@ day_network_charge_fun <- function(sD,yeartime){
 #'
 #' @examples
 #' peak_network_charge_fun(sD,2028.6)
-peak_network_charge_fun <- function(sD,yeartime){
+peak_network_charge_fun <- function(scen,yeartime){
   #
-  charges <- sD %>% dplyr::filter(parameter %in% c("peak_network_charge_2020","peak_network_charge_2026","peak_network_charge_2030","peak_network_charge_2040")) %>% dplyr::pull(value)
+  charges <- scen %>% dplyr::filter(parameter %in% c("peak_network_charge_2020","peak_network_charge_2026","peak_network_charge_2030","peak_network_charge_2040")) %>% dplyr::pull(value)
   approx(x=c(2020.5,2026.5,2030.5,2040.5), y=charges,xout=yeartime,rule=2)$y %>% return()
 }
 
 #' standing_charge_fun
 #'
-#' household standing charge (expectations & historical). The current model assumes that the standing charge
+#' household standing charge (expectations & historical). The current setup assumes that the standing charges for flat and tou pricing are the same.
+#' The dynamic standing charge may differ.
 #'
-#' @param sD scenario dataframe
+#' @param scen scenario dataframe
 #' @param yeartime decimal time
+#' @param tariff_plan tariff plan (flat, tou or dynamic)
 #'
 #' @return standing charge
 #' @export
 #'
 #' @examples
-#' standing_charge_fun(sD,2026)
-standing_charge_fun <- function(sD,yeartime){
+#' standing_charge_fun(sD,2036,"dynamic")
+standing_charge_fun <- function(scen,yeartime,tariff_plan){
 
-  values <- sD %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
-  approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y %>% return()
-
+  if(tariff_plan %in% c("flat","tou"))
+  {values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+  res <- approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y}
+  else
+  {values <- scen %>% dplyr::filter(parameter %in% c("dynamic_standing_charge_2026","dynamic_standing_charge_2030","dynamic_standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+  res <- approx(x=c(2026.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y}
+  return(res)
 
 }
-
 
 
 #' decompose_logprices
@@ -383,7 +390,6 @@ generate_logprice_hmm <- function(dcmp,n_states=3,winsor=0.01){
 #' \cr
 #' In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
 #' a log transformation for prices greater than \eqn{scale}.
-
 #' pre 2026
 #'
 #' @param scen scenario
@@ -396,7 +402,7 @@ generate_logprice_hmm <- function(dcmp,n_states=3,winsor=0.01){
 #' dynamic_prices(sD)
 dynamic_prices <- function(scen,end_year=2040){
   #
-  scale0 <- sD %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
+  scale0 <- scen %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
   t1 <- lubridate::ymd_hms("2026-01-01 00:00:00", tz = "UTC")
   t2 <- lubridate::ymd_hms(paste(end_year,"-12-31 23:00:00", tz = "UTC", sep=""))
   # 2. Generate the hourly equence using base R's seq() with lubridate's hours(1)
@@ -495,8 +501,7 @@ dynamic_prices <- function(scen,end_year=2040){
 #' get_sem_prices
 #'
 #' creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
-#' The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run). A dynmaic price
-#' cap is
+#' The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run).
 #'
 #' @param scen scenario
 #' @param start_year default 2019
@@ -515,7 +520,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
   tou <- tou_tariffs %>% dplyr::rename("hour"=start) %>% dplyr::rename("tou"=tariff) %>% dplyr::select(-end)
   ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou) %>% dplyr::select(-hour)
 
-  dynamic <- dynamic_prices(sD,end_year) %>% dplyr::select(-regime)
+  dynamic <- dynamic_prices(scen,end_year) %>% dplyr::select(-regime)
   ts %>% dplyr::inner_join(dynamic)
   #impose a price cap
   #cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
@@ -603,4 +608,24 @@ roundr <- function (x)
   x1 <- trunc(x)
   weights = c(1 + x1 - x, x - x1)
   return(sample(c(x1, x1 + 1), size = 1, prob = weights))
+}
+
+
+#' sem_trend_price
+#'
+#' The projected trend sem price. Not used much except to model the likely dynamic price cao set by CRU.
+#'
+#' @param scen input scenario
+#' @param yeartime decimal time
+#'
+#' @returns euros per kWh
+#' @export
+#'
+#' @examples
+#' sem_trend_price(sD,2028)
+sem_trend_price <- function(scen,yeartime){
+  #
+  values <- scen %>% dplyr::filter(parameter %in% c("sem_price_2026","sem_price_2030","sem_price_2040")) %>% dplyr::pull(value) #add more costs here if known
+  res <- approx(x=c(2026,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y
+  return(res)
 }

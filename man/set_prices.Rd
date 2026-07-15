@@ -4,24 +4,27 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen)
+set_prices(scen, cru_cap = TRUE)
 }
 \arguments{
 \item{scen}{scenario}
+
+\item{cru_cap}{Boolean, defaults to TRUE}
 }
 \description{
-set_price() is a *retail* electricity tariff pricing model based on wholesale prices and network charges. The purpose of
+set_prices() is a *retail* electricity tariff pricing model based on wholesale prices and network charges. The purpose of
 this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
 prices with reasnable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections would not be meaningful because they would depend
 on specific assumptions. This is equivalent to the assumption that network supplier set their prices so that the average price paid by
-customers on flat, ToU and dynamic prices are similar across standard profiles. In practice
-}
-\details{
+customers on flat, ToU and dynamic prices are similar across standard profiles.\cr
+\cr
 Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
 peak_network_charge_fun(scen,yeartime) etc. There is a supplier uplift on top of the regulated network charge. The model assumes that
-wholesale prices + VAT are passed through.
-
-set_prices() is run at the beginning of each run
+wholesale prices + VAT are passed through.\cr
+\cr
+set_prices() is run at the beginning of each run.\cr
+\cr
+Optionally, the price cap (currently 0.5) can be turned off.
 }
 \examples{
 set_prices(sD)

@@ -4,19 +4,22 @@
 \alias{standing_charge_fun}
 \title{standing_charge_fun}
 \usage{
-standing_charge_fun(sD, yeartime)
+standing_charge_fun(scen, yeartime, tariff_plan)
 }
 \arguments{
-\item{sD}{scenario dataframe}
+\item{scen}{scenario dataframe}
 
 \item{yeartime}{decimal time}
+
+\item{tariff_plan}{tariff plan (flat, tou or dynamic)}
 }
 \value{
 standing charge
 }
 \description{
-household standing charge (expectations & historical). The current model assumes that the standing charge
+household standing charge (expectations & historical). The current setup assumes that the standing charges for flat and tou pricing are the same.
+The dynamic standing charge may differ.
 }
 \examples{
-standing_charge_fun(sD,2026)
+standing_charge_fun(sD,2036,"dynamic")
 }
