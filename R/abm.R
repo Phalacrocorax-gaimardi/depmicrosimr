@@ -9,18 +9,25 @@
 #' 14% of households are on the old (dual meter) day/night tariff.\cr
 #' \cr
 #' 3-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-#' a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).
+#' a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).\cr
+#' \cr
+#' Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
+#' \cr
+#' \cr
+#' The nework input is used to determine the social degree of each agent.
 #'
 #' @param sD scenario design dataframe
 #' @param start_year default 2019
 #' @param prices_scen tariff prices dataframe
+#' @param social_network social network
 #'
 #' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
 #' @export
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' initialise_agents(sD,2019,prices_scen)
-initialise_agents <- function(sD, start_year=2019,prices_scen){
+#' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+#' initialise_agents(sD,2019,prices_scen,social_network)
+initialise_agents <- function(sD, start_year=2019,prices_scen,social_network){
 
   #agents_in has a minimal set of survey data
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
@@ -33,17 +40,19 @@ initialise_agents <- function(sD, start_year=2019,prices_scen){
   agents_in <- agents_in %>% dplyr::mutate(q41 = replace(q41,q41 %in% c(3,4,5),1))
   #assume that 2/3 of day/night customers were on the old day/night rate in 2019
   agents_in <- agents_in %>% dplyr::mutate(q41 = replace(q41,sample(which(q41 == 2), floor(sum(q41 == 2) / 3)),1))
-  tous <- tibble::tibble(q41=c(1,2),tariff_plan=c("flat","tou"))
-  agents_in <- agents_in %>% dplyr::inner_join(demand) %>% dplyr::inner_join(tous)
+  tous <- tibble::tibble(q41=c(1,2),tariff_plan=c("flat","tou_old"))
+  agents_in <- agents_in %>% dplyr::inner_join(demand,by="serial") %>% dplyr::inner_join(tous,by="q41")
   county_codes <- dep_qanda %>% dplyr::filter(question_code=="qc1") %>% dplyr::rename("qc1"=response_code)
   county_codes <- county_codes %>% dplyr::rename("county"=response) %>% dplyr::select(qc1,county)
   area_codes <- dep_qanda %>% dplyr::filter(question_code=="qg") %>% dplyr::rename("qg"=response_code)
   area_codes <- area_codes %>% dplyr::rename("area"=response) %>% dplyr::select(qg,area)
   area_codes <- area_codes %>% dplyr::mutate(area=dplyr::if_else(qg %in% c(1,3),"Rural","Urban"))
-  agents_in <- agents_in %>% dplyr::inner_join(area_codes) %>% dplyr::inner_join(county_codes)
-  agents_in <- agents_in %>% dplyr::inner_join(smart_meter_rollout)
-  #
-  agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff_plan,yeartime,area)
+  agents_in <- agents_in %>% dplyr::inner_join(area_codes,by="qg") %>% dplyr::inner_join(county_codes,by="qc1")
+  agents_in <- agents_in %>% dplyr::inner_join(smart_meter_rollout,by=c("area","county"))
+  #impute missing network degrees
+
+
+  agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff_plan,rollout,area)
   #combine with structural params
   agents_in <- agents_in %>% dplyr::inner_join(struct_params)
   #rollout year
@@ -71,9 +80,9 @@ initialise_agents <- function(sD, start_year=2019,prices_scen){
                                                                     area=="Rural"~"lp3"))
   #actual profile
   agents_in <- agents_in %>% dplyr::mutate(profile=dplyr::case_when(area=="Urban"&tariff_plan=="flat"~"lp1",
-                                                                    area=="Urban"&tariff_plan=="tou"~"lp2",
+                                                                    area=="Urban"&tariff_plan=="tou_old"~"lp2",
                                                                     area=="Rural"&tariff_plan=="flat"~"lp3",
-                                                                    area=="Rural"&tariff_plan=="tou"~"lp4"))
+                                                                    area=="Rural"&tariff_plan=="tou_old"~"lp4"))
 
   agents_in <- agents_in %>% dplyr::select(-flexibility,-proactive,-inertia)
   #current annual bills
@@ -83,6 +92,10 @@ initialise_agents <- function(sD, start_year=2019,prices_scen){
   agents_in <- agents_in  %>% dplyr::mutate(annual_bill = purrr::pmap_dbl(list(kWh, tariff_plan, profile), get_bill))
   #tidy up
   agents_in$serial <- as.character(agents_in$serial)
+  agents_in$q_dyn <- 0
+  #add the network degree
+  agents_in <- agents_in %>% dplyr::inner_join(tibble::as_tibble(social_network) %>% dplyr::select(serial,degree),by="serial")
+  print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
   agents_in %>% return()
 }
 
@@ -108,9 +121,11 @@ initialise_agents <- function(sD, start_year=2019,prices_scen){
 #' @examples
 #'
 #' prices_scen <- set_prices(sD)
-#' agents_in <- initialise_agents(sD,2019,prices_scen)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+#' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
+#'
 #' #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
+#' #agents_2 <- update_agents(sD,2026+4/6,agents_in,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,quiet=TRUE){
   #
@@ -120,24 +135,31 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #empirical_u <- hp_empirical_utils %>% dplyr::filter(calibration_run==cal_run) %>% dplyr::select(-calibration_run)
   #social utility - knowing others who have installed an heat pump
   #theta <- dplyr::filter(empirical_u,question_code=="theta")$du_average
-
   a_s <- agents_in
   n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan=="dynamic"))[1]
   print(paste("initial number of dynamics", n_dynamic))
-  #temporary social norm
-  du_social <- params$nu.*n_dynamic/dim(a_s)[1]
-  #update current annual electricity cost? too slow
-  #a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(annual_bill = ))
+  #social influence (homogeneous)
+  #du_social <- params$nu.*n_dynamic/dim(a_s)[1]
+  #assume that any old day/night custeomers are converted to day/night/peak rate when smart meters are installed.
+  a_s <- a_s %>% dplyr::mutate(tariff_plan=replace(tariff_plan, (tariff_plan=="tou_old") & (yeartime >= rollout),"tou"))
   a_s <- dplyr::ungroup(a_s)
+  #only consider switcher when smart meter are installed
   #random subset of potential switchers
   b_s <- dplyr::slice_sample(a_s,n=roundr(dim(a_s)[1]*params$p.))
-  #nore ellipsis to handle uncalled columns
-  tariff_plan_bills_env <- function(kWh,phi,gamma,eta,tau,natural_profile,...) tariff_plan_bills(yeartime,kWh,phi,gamma,eta,tau,natural_profile,prices_scen)
+  #note ellipsis to handle uncalled columns
+  tariff_plan_bills_env <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,...) {
+
+    tariff_plan_bills(kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,prices_scen)
+  }
 
   b_s <- b_s %>% dplyr::select(-annual_bill,-tariff_plan)
 
   b_s_1 <- b_s %>% dplyr::mutate(bills_data = purrr::pmap(dplyr::pick(dplyr::everything()), tariff_plan_bills_env)) %>% tidyr::unnest(bills_data)
   #agent evaluates savings relative to closest non-risky tariff plan
+  #agents take avability of tariff plans into account
+  #i.e no tou option if yeartime < rollout
+  #b_s_1 <- b_s_1 %>% dplyr::filter(!(tariff_plan=="tou" & yeartime < rollout))
+
   b_s_1 <- b_s_1 %>% dplyr::group_by(serial) %>% dplyr::slice_min(order_by = annual_bill, n = 2,with_ties = FALSE)
   #evaluate the total utilities
    #
@@ -150,16 +172,19 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
       savings       = (dplyr::first(annual_bill-dplyr::nth(annual_bill, 2))/dplyr::nth(annual_bill, 2)),
       .groups       = "drop")
   b_s_2 <- b_s %>% dplyr::inner_join(aux,by="serial")
+  #compute social influence
+  #assume it saturates beyond
+  b_s_2 <- b_s_2 %>% dplyr::mutate(du_social = dplyr::if_else(degree==0,0,params$nu.*pmin(1,q_dyn/degree)))
   b_s_2 <- b_s_2 %>% dplyr::mutate(du_tot = dplyr::if_else(cheapest_plan=="dynamic", du_social-savings-theta,-savings))
   #only adopt if
-  b_s_2 <- b_s_2 %>% dplyr::mutate(tariff_plan = dplyr::if_else(du_tot>0,cheapest_plan,next_plan),
-                                   annual_bill=dplyr::if_else(du_tot>0,cheapest_bill,next_bill))#barrier
-  b_s <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-savings)
+  b_s_2 <- b_s_2 %>% dplyr::mutate(tariff_plan = dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_plan,next_plan),
+                                   annual_bill=dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_bill,next_bill))#barrier
+  b_s_3 <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-du_social,-savings)
 
-  b_s$profile <- "computed"
+  b_s_3$profile <- "computed"
   #update agents with switchers
-  a_s <- dplyr::filter(a_s, !(serial %in% b_s$serial))
-  a_s <- dplyr::bind_rows(a_s,b_s) %>% dplyr::arrange(serial)
+  a_s <- dplyr::filter(a_s, !(serial %in% b_s_3$serial))
+  a_s <- dplyr::bind_rows(a_s,b_s_3) %>% dplyr::arrange(serial)
   a_s <- a_s %>% dplyr::mutate(dep_adopter=(tariff_plan=="dynamic"))
   #a_s <- a_s %>% dplyr::mutate(kW=heating_system_size(ber*floor_area))
   #recompute social variable
@@ -173,11 +198,174 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #agents_out <- a_s
   #a_s <- a_s %>% dplyr::select(-du_tot)
   if(!quiet) {
-    print(paste("time", round(yeartime,1), "number of system breakdowns",dim(b_s1)[1]))
+    print(paste("time", round(yeartime,1), "number of switchers",dim(b_s)[1]))
     }
   a_s <- a_s %>% dplyr::select(-dep_adopter)
   return(dplyr::ungroup(a_s))
 }
 
+
+#' runABM
+#'
+#' Runs the dynamic electricity pricing adoption simulation on artificial society of ~1217 agents.
+#' Each run is performed on an independently generated social network with randomisation from initialise_agents() \cr
+#' \cr
+#' Bi-monthly timesteps. \cr
+#' \cr
+#' Good luck.
+#'
+#' @param scen scenario set-up dataframe, typically read with readr::read_xlxs(...,sheet=scenario)
+#' @param Nrun integer, number runs
+#' @param simulation_end the final year of simulation of early termination is required
+#' @param resample_society if TRUE resample hp_society_oo with replacement to capture additional variability
+#' @param n_unused_cores number of cores left unused in parallel/foreach. Recommended values 2 or 1.
+#' @param use_parallel if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.
+#' @param ignore_social if TRUE ignore social network effects. Default is FALSE
+#' @param quiet if TRUE messaging is reduced
+#'
+#' @return a three component list - simulation output, scenario setup, meta-parameters
+#' @export
+#' @importFrom magrittr %>%
+#' @importFrom lubridate %m+%
+#' @importFrom foreach %dopar%
+#'
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_cores=2, use_parallel=F,ignore_social=F, quiet=TRUE){
+  #
+  year_zero <- 2019
+  #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
+  p. <- scen %>% dplyr::filter(parameter=="p.") %>% dplyr::pull(value)/10 #inertia
+  nu. <- scen %>% dplyr::filter(parameter=="nu.") %>% dplyr::pull(value) #social
+  theta. <-  scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
+  #
+  print(paste("inertia (nu.)=",round(nu.,2),"p.=",round(p.,4),"theta.=",round(theta.,3)))
+  #seai_elec <- pvbessmicrosimr::seai_elec
+  #bi-monthly runs
+  Nt <- round((simulation_end-year_zero+1)*6)
+  #annual runs
+  #Nt <- round((simulation_end-year_zero+1))
+  #agents0 <- agents_i
+  #cal_run <- 40
+  #u_empirical <- empirical_utils_oo %>% dplyr::filter(calibration==cal_run) %>% dplyr::select(-calibration)
+
+  if(use_parallel){
+    #clean exit
+    #
+    number_of_cores <- parallel::detectCores() - n_unused_cores
+    cl <- parallel::makeCluster(number_of_cores)
+    doParallel::registerDoParallel(cl)
+
+    on.exit({
+      doParallel::stopImplicitCluster()  # 1. Unregister from doParallel
+      parallel::stopCluster(cl)
+      foreach::registerDoSEQ()
+      cl <- NULL}
+    )
+
+    abm <- foreach::foreach(j = 1:Nrun, .packages = "dplyr", .combine=dplyr::bind_rows,
+                            .export = c("initialise_agents","update_agents","make_artificial_society","heat_pump_upgrade_savings")) %dopar% {
+                                          #abm <- foreach::foreach(j = 1:Nrun, .errorhandling = "pass",.export = c("initialise_agents","update_agents4")) %dopar% {
+
+                                          #randomiise ICEV emissions assignment
+                                          #choose segments
+                                          microcal_run <- sample(1:100,1)
+                                          agents_in <- initialise_agents(sD,year_zero,microcal_run)
+                                          u_empirical <- hp_empirical_utils %>% dplyr::filter(calibration_run==microcal_run) %>% dplyr::select(-calibration_run)
+
+                                          #create a new artificial society for each run
+                                          print(paste("Generating network for run",j,"...."))
+                                          if(!resample_society) social <- make_artificial_society(dep_society_1 %>% dplyr::filter(serial %in% agents_in$serial),homophily,4.5)
+                                          if(resample_society){
+                                            agent_resample <- sample(1:dim(dep_society_1)[1],replace=T)
+                                            society_new <- society[agent_resample,]
+                                            society_new$ID <- 1:dim(dep_society_1)[1]
+                                            social <- make_artificial_society(society_new,homophily,4.5)
+                                          }
+
+                                          #no transactions
+                                          #agents_in$transaction <- FALSE
+                                          agent_ts <- vector("list",Nt)
+                                          agent_ts[[1]] <- agents_in #agent parameters with regularized weights
+
+                                          for(t in seq(2,Nt)){
+                                            #bi-monthly
+                                            yeartime <- year_zero+(t-1)/6
+                                            agent_ts[[t]] <- update_agents(sD,yeartime,agent_ts[[t-1]],social_network=social,ignore_social,cal_run=microcal_run,quiet) #static social network, everything else static
+                                          }
+
+                                          for(t in 1:Nt) agent_ts[[t]]$t <- t
+                                          #agent_ts <- tibble::as_tibble(data.table::rbindlist(agent_ts,fill=T))
+                                          agent_ts <- purrr::list_rbind(agent_ts)
+                                          agent_ts$simulation <- j
+                                          #add vertex degree
+                                          degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
+                                          agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
+                                          agent_ts
+                                        }
+    #gc(full = TRUE, verbose = FALSE)
+
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","rho.","r.","beta.","eta.","tau."),value=c(Nrun,simulation_end,p,nu,rho,r,beta,eta,tau))
+    abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
+    return(list("abm"=abm,"scenario"=sD,"system"=meta))
+  }
+
+  #don't use parallel
+  #comment in next two lines for parallel
+  if(!use_parallel){
+
+    abm <- tibble::tibble()
+    #number_of_cores <- parallel::detectCores() - n_unused_cores
+    #doParallel::registerDoParallel(number_of_cores)
+    #comment out next line for parallel
+    for(j in 1:Nrun){
+      #generate a new set of prices and a new network
+      print(paste("Generating price simulation for run",j,"...."))
+      prices_scen <- set_prices(scen)
+      #
+      print(paste("Generating social network for run",j,"...."))
+      if(!resample_society) social <- make_artificial_society(dep_society_1,homophily,4.5)
+
+      if(resample_society){
+        agent_resample <- sample(1:dim(pv_society_oo)[1],replace=T)
+        society_new <- pv_society_oo[agent_resample,]
+        society_new$ID <- 1:dim(pv_society_oo)[1]
+        social <- make_artificial_society(society_new,homophily,5)
+
+      }
+      print(paste("initialising agents.."))
+      agents_in <- initialise_agents(sD,year_zero,prices_scen,social)
+
+      #no transactions
+      #agents_in$transaction <- FALSE
+      agent_ts <- vector("list",Nt)
+      agent_ts[[1]] <- agents_in #agent parameters with regularized weights
+
+      for(t in seq(2,Nt)){
+        #
+        #yeartime <- year_zero+(t-1)
+        yeartime <- year_zero+(t-1)/6
+        agent_ts[[t]] <- update_agents(sD,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
+        #agent_ts[[t]] <- tibble::tibble(t=t)
+      }
+
+      for(t in 1:Nt) agent_ts[[t]]$t <- t
+      #agent_ts <- tibble::as_tibble(data.table::rbindlist(agent_ts,fill=T))
+      agent_ts <- purrr::list_rbind(agent_ts)
+      agent_ts$simulation <- j
+      #network degree
+      degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
+      agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
+      abm <- dplyr::bind_rows(abm,agent_ts)
+      #comment in next line for parallel
+      #agent_ts
+    }
+
+    #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta."),value=c(Nrun,simulation_end,p.,nu.,theta.))
+    #replace "t" with dates
+    abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
+    return(list("abm"=abm,"scenario"=sD,"system"=meta))
+  }
+
+}
 
 

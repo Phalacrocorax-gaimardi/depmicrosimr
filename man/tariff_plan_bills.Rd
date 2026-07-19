@@ -5,19 +5,18 @@
 \title{tariff_plan_bills}
 \usage{
 tariff_plan_bills(
-  yeartime,
   kWh,
   phi,
   gamma,
   eta,
   tau,
-  natural_profile = "LP3",
+  natural_profile = "LP1",
+  yeartime,
+  smart_rollout,
   prices_scen
 )
 }
 \arguments{
-\item{yeartime}{decimal time}
-
 \item{kWh}{annual load}
 
 \item{phi}{\eqn{\phi}}
@@ -30,6 +29,10 @@ tariff_plan_bills(
 
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
+\item{yeartime}{current decimal time}
+
+\item{smart_rollout}{smart meter rollout time}
+
 \item{prices_scen}{price scenario}
 }
 \value{
@@ -40,5 +43,7 @@ tariff_plan_bills
 }
 \examples{
 prices_scen <- set_prices(sD)
-tariff_plan_bills(2030,8760,0.25,1,0.2,48,"LP1",prices_scen)
+tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2030,2025,prices_scen)
+tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2025.5,2025,prices_scen)
+tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2020,2025,prices_scen)
 }

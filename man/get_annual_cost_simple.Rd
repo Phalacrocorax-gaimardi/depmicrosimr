@@ -36,6 +36,6 @@ are typically the output of get_tariff_prices(scenario)
 \examples{
 
 prices_scen <- set_prices(sD)
-get_annual_cost_simple(2019,4000,"flat","LP2",prices_scen=prices_scen)
+get_annual_cost_simple(2019,4000,"tou_old","LP2",prices_scen=prices_scen)
 
 }

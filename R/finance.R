@@ -175,19 +175,20 @@ get_price_load_scen <- function(scen,start_year=2019,end_year=2040){
 #'
 #' prices_scen <- set_prices(sD)
 #' get_annual_cost(2026,8760,"tou",0.5,1,1,48,"LP1",prices_scen)
-#' get_annual_cost(2026,8760,"tou",0.5,1,1,48,"LP3",prices_scen)
+#' get_annual_cost(2026,8760,"dynamic",0.5,1,1,48,"LP3",prices_scen)
 get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24, natural_profile="LP1", prices_scen) {
-
-  stopifnot(tariff_plan %in% c("flat","tou","dynamic"))
+  #
+  stopifnot(tariff_plan %in% c("flat","tou","toy_old","dynamic"))
   profile <- tolower(natural_profile)
   load <- load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
-  prices_scen <- prices_scen %>% dplyr::inner_join(load) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
+  #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
+  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
   # 1. Fast date boundary calculation
   start_time <- lubridate::date_decimal(yeartime)
   end_time   <- lubridate::date_decimal(yeartime + 1)
 
   # 2. Extract matching records
-  df <- prices_scen %>% dplyr::filter(datetime >= start_time,
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
                                       datetime <= end_time)
 
   # 3. Vectorized baseline load adjustment
@@ -242,17 +243,17 @@ get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta
 #' @examples
 #'
 #' prices_scen <- set_prices(sD)
-#' get_annual_cost_simple(2019,4000,"flat","LP2",prices_scen=prices_scen)
+#' get_annual_cost_simple(2019,4000,"tou_old","LP2",prices_scen=prices_scen)
 #'
 get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", prices_scen) {
 
-  stopifnot(tariff_plan %in% c("flat","tou","dynamic"))
+  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   profile <- tolower(profile)
   stopifnot(profile %in% c("lp1","lp2","lp3","lp4"))
   #one year
   start_time <- lubridate::date_decimal(yeartime)
   end_time   <- lubridate::date_decimal(yeartime + 1)
-
+  tariff_plan <- if(tariff_plan=="tou_old") {"tou"} else (tariff_plan)
   #datetime range
   df <- prices_scen %>%
     dplyr::filter(
@@ -312,18 +313,21 @@ set_prices <- function(scen,cru_cap=TRUE){
                                                       tariff=="day"~day_network_charge_fun(scen,y),
                                                       tariff=="peak"~peak_network_charge_fun(scen,y)))
   #assume price cap scales with trend sem price
-  prices <- prices %>% dplyr::mutate(dynamic_cap=0.5*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
-  #VAT applied to everything
-  prices <- prices %>% dplyr::mutate(dynamic_price=pmin(dynamic_cap,sem)+network_price) %>% dplyr::select(-dynamic_cap)
+  if(cru_cap) {
+    prices <- prices %>% dplyr::mutate(dynamic_cap=0.5*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
+    prices <- prices %>% dplyr::mutate(price=pmin(dynamic_cap,sem)+network_price) #%>% dplyr::select(-dynamic_cap)
+  } else{
+    prices <- prices %>% dplyr::mutate(price=sem+network_price)
+  }
+
   #dynamic prices
-  dyn_prices <- prices %>% dplyr::select(datetime,tariff,dynamic_price) %>% dplyr::mutate(tariff_plan="dynamic")
-  dyn_prices <- dyn_prices %>% dplyr::rename("price"=dynamic_price)
+  dyn_prices <- prices %>% dplyr::select(datetime,tariff,price) %>% dplyr::mutate(tariff_plan="dynamic")
   #################################
   # a somewhat speculative guess about how network suppliers arrive at their flat tariff
   # mean flat prices paid by year
   #################################
-  flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*dynamic_price),dynamic_lp2=sum(lp2*dynamic_price),
-                                                                        dynamic_lp3=sum(lp3*dynamic_price),dynamic_lp4=sum(lp4*dynamic_price))
+  flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price),dynamic_lp2=sum(lp2*price),
+                                                                        dynamic_lp3=sum(lp3*price),dynamic_lp4=sum(lp4*price))
   #average over load profiles
   flat_prices <- flat_prices %>% tidyr::pivot_longer(-year,names_to="profile",values_to="price")
   flat_prices <- flat_prices %>% dplyr::group_by(year) %>% dplyr::summarise(price=mean(price))
@@ -331,8 +335,8 @@ set_prices <- function(scen,cru_cap=TRUE){
   flat_prices <- flat_prices %>% dplyr::mutate(yeartime=midyear(year,tariff)) %>% dplyr::ungroup() %>% dplyr::select(-year)
 
   #tou prices
-  tou_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime),tariff) %>% dplyr::summarise(dynamic_lp1=sum(lp1*dynamic_price)/sum(lp1),dynamic_lp2=sum(lp2*dynamic_price)/sum(lp2),
-                                                                              dynamic_lp3=sum(lp3*dynamic_price)/sum(lp3),dynamic_lp4=sum(lp4*dynamic_price)/sum(lp4))
+  tou_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime),tariff) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price)/sum(lp1),dynamic_lp2=sum(lp2*price)/sum(lp2),
+                                                                              dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
   #
   tou_prices <- tou_prices %>% tidyr::pivot_longer(c(-year,-tariff),names_to="profile",values_to="price")
   tou_prices <- tou_prices %>% dplyr::group_by(year,tariff) %>% dplyr::summarise(price=mean(price)) %>% dplyr::ungroup()
@@ -413,13 +417,14 @@ vat_rate_fun <- function(scen,yeartime){
 
 #' tariff_plan_bills
 #'
-#' @param yeartime decimal time
 #' @param kWh annual load
 #' @param phi \eqn{\phi}
 #' @param gamma \eqn{\gamma}
 #' @param eta \eqn{\eta}
 #' @param tau \eqn{\tau}
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
+#' @param yeartime current decimal time
+#' @param smart_rollout smart meter rollout time
 #' @param prices_scen price scenario
 #'
 #' @returns dataframe
@@ -427,11 +432,19 @@ vat_rate_fun <- function(scen,yeartime){
 #'
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' tariff_plan_bills(2030,8760,0.25,1,0.2,48,"LP1",prices_scen)
-tariff_plan_bills <- function(yeartime,kWh,phi,gamma,eta,tau,natural_profile="LP3",prices_scen){
+#' tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2030,2025,prices_scen)
+#' tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2025.5,2025,prices_scen)
+#' tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2020,2025,prices_scen)
+tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",yeartime,smart_rollout,prices_scen){
 
   stopifnot(tolower(natural_profile) %in% c("lp1","lp3"))
-  plans <- c("flat","tou","dynamic")
+  plans <- if (yeartime >= 2026.5) {
+    c("flat", "tou", "dynamic")
+    } else if (yeartime < smart_rollout) {
+    c("flat")
+    } else {
+    c("flat", "tou")
+  }
   df <- tibble::tibble()
   for(plan in plans){
    df0 <- get_annual_cost(yeartime, kWh, plan, phi, gamma, eta, tau, natural_profile, prices_scen) |> dplyr::select(tariff_plan,annual_bill_flexible)

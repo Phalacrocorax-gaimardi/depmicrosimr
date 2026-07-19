@@ -85,8 +85,8 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
   #impute missing bills
   data_in <- data_in %>% dplyr::select(serial,q14,q15,qi)
   complete_data <- data_in %>% dplyr::filter(q14!=13,q15 != 13)
-  complete_data <- complete_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q15"=response_code,"lowest_bill"=bill))
-  complete_data <- complete_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q14"=response_code,"highest_bill"=bill))
+  complete_data <- complete_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q15"=response_code,"lowest_bill"=bill),by="q15")
+  complete_data <- complete_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q14"=response_code,"highest_bill"=bill),by="q14")
   complete_data <- complete_data %>% dplyr::mutate(dplyr::across(dplyr::everything(),as.numeric))
   # regression model relating high and low bills
   high_model <- nls(highest_bill ~ a * lowest_bill + exp(b), start = list(a = 2, b = 1),
@@ -96,7 +96,7 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
 
   #q14 missing but not q15
   missing_high_data <- data_in %>% dplyr::filter(q14==13,q15 != 13)
-  missing_high_data <- missing_high_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q15"=response_code,"lowest_bill"=bill))
+  missing_high_data <- missing_high_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q15"=response_code,"lowest_bill"=bill),by="q15")
   missing_high_data$lowest_bill <- as.numeric(missing_high_data$lowest_bill)
   coefs <- summary(high_model)$coefficients[, "Estimate"]
   std_errors <- summary(high_model)$coefficients[, "Std. Error"]
@@ -105,7 +105,7 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
   missing_high_data <- missing_high_data %>% dplyr::mutate(highest_bill = a*lowest_bill + exp(b))
   #q15 missing but not q15
   missing_low_data <- data_in %>% dplyr::filter(q14!=13,q15 == 13)
-  missing_low_data <- missing_low_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q14"=response_code,"highest_bill"=bill))
+  missing_low_data <- missing_low_data %>% dplyr::inner_join(bill_values %>% dplyr::rename("q14"=response_code,"highest_bill"=bill),by="q14")
   missing_low_data$highest_bill <- as.numeric(missing_low_data$highest_bill)
   coefs <- summary(low_model)$coefficients[, "Estimate"]
   std_errors <- summary(low_model)$coefficients[, "Std. Error"]
@@ -120,7 +120,7 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
   missing_both_data <- data_in %>% dplyr::filter(q14==13,q15 == 13) #143 rows
   #model by household profile
   logparams <- complete_data %>% dplyr::group_by(qi) %>% dplyr::summarise(logmean=mean(log(highest_bill)),logsd=sd(log(highest_bill)))
-  missing_both_data <- missing_both_data %>% dplyr::inner_join(logparams) %>% dplyr::rowwise() %>% dplyr::mutate(highest_bill=rlnorm(1,logmean,logsd))
+  missing_both_data <- missing_both_data %>% dplyr::inner_join(logparams,by="qi") %>% dplyr::rowwise() %>% dplyr::mutate(highest_bill=rlnorm(1,logmean,logsd))
   #missing_both_data$highest_bill <- rlnorm(nrow(missing_both_data),logmean,sdmean)
   coefs <- summary(low_model)$coefficients[, "Estimate"]
   std_errors <- summary(low_model)$coefficients[, "Std. Error"]

@@ -10,7 +10,7 @@ g1 <- g1 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(
 g1
 g3 <- prices %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(datetime)==48) %>% ggplot(aes(datetime,price)) +geom_line(colour="grey60",linewidth=1.2)
 g3 <- g3 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,1))
-export::graph2ppt(g1,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/heteroskedastic_prices.png")
+#export::graph2ppt(g1,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/heteroskedastic_prices.png")
 #
 demand <- prices
 demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2035)
@@ -46,81 +46,6 @@ g + g1 + plot_layout(widths = c(4, 1))
 
 #export::graph2ppt(g1 + g2,"~/Policy/CAMG/Dynamic Pricing/sem_simulation.png")
 
-#prices %>% group_by(year = year(datetime)) %>% summarise(price=mean(price)) %>% ggplot(aes(year,price))+geom_line()
-#sem_prices_2019_2025 %>% group_by(year=year(datetime)) %>% summarise(price=mean(price)/1000) %>% ggplot(aes(year,price))+geom_line()
-prices <- prices %>% mutate(hour=hour(datetime)) %>% inner_join(tou_tariffs %>% rename("hour"=start)) %>% rename("sem"=price)
-
-prices <- prices %>% mutate(network_price=case_when(tariff=="night"~night_network_charge_fun(sD,decimal_date(datetime)),
-                                          tariff=="day"~day_network_charge_fun(sD,decimal_date(datetime)),
-                                          tariff=="peak"~peak_network_charge_fun(sD,decimal_date(datetime))))
-
-prices <- prices %>% mutate(dynamic_price=1.09*sem+network_price)
-#mean flat prices paid by year
-flat_prices <- prices %>% group_by(year=year(datetime)) %>% summarise(dynamic_lp1=sum(lp1*dynamic_price),dynamic_lp2=sum(lp2*dynamic_price),
-                                                       dynamic_lp3=sum(lp3*dynamic_price),dynamic_lp4=sum(lp4*dynamic_price))
-#average over load profiles
-flat_prices <- flat_prices %>% pivot_longer(-year,names_to="profile",values_to="price")
-flat_prices <- flat_prices %>% group_by(year) %>% summarise(price=mean(price))
-
-#
-set_prices <- function(sD){
-
-  prices <- get_price_load_scen(sD)
-  prices <- prices %>% mutate(hour=hour(datetime)) %>% inner_join(tou_tariffs %>% rename("hour"=start)) %>% rename("sem"=price)
-
-  prices <- prices %>% mutate(network_price=case_when(tariff=="night"~night_network_charge_fun(sD,decimal_date(datetime)),
-                                                      tariff=="day"~day_network_charge_fun(sD,decimal_date(datetime)),
-                                                      tariff=="peak"~peak_network_charge_fun(sD,decimal_date(datetime))))
-  #
-  prices <- prices %>% mutate(dynamic_price=1.09*sem+network_price)
-  #dynamic prices
-  dyn_prices <- prices %>% select(datetime,tariff,dynamic_price) %>% mutate(tariff_plan="dynamic") %>% rename("price"=dynamic_price)
-  #mean flat prices paid by year
-  flat_prices <- prices %>% group_by(year=year(datetime)) %>% summarise(dynamic_lp1=sum(lp1*dynamic_price),dynamic_lp2=sum(lp2*dynamic_price),
-                                                                        dynamic_lp3=sum(lp3*dynamic_price),dynamic_lp4=sum(lp4*dynamic_price))
-  #average over load profiles
-  flat_prices <- flat_prices %>% pivot_longer(-year,names_to="profile",values_to="price")
-  flat_prices <- flat_prices %>% group_by(year) %>% summarise(price=mean(price))
-  flat_prices <- flat_prices %>% inner_join(expand_grid(year=flat_prices$year,tariff=c("day","night","peak")))
-  flat_prices <- flat_prices %>% mutate(yeartime=midyear(year,tariff)) %>% ungroup() %>% select(-year)
-
-  #tou prices
-  tou_prices <- prices %>% group_by(year=year(datetime),tariff) %>% summarise(dynamic_lp1=sum(lp1*dynamic_price)/sum(lp1),dynamic_lp2=sum(lp2*dynamic_price)/sum(lp2),
-                                                                              dynamic_lp3=sum(lp3*dynamic_price)/sum(lp3),dynamic_lp4=sum(lp4*dynamic_price)/sum(lp4))
-  #
-  tou_prices <- tou_prices %>% pivot_longer(c(-year,-tariff),names_to="profile",values_to="price")
-  tou_prices <- tou_prices %>% group_by(year,tariff) %>% summarise(price=mean(price))
-  #key yeartimes (taking July 2 as middle day)
-  midyear <- function(year,tariff) {case_when(tariff=="night"~decimal_date(ymd_hms(paste(year,"-07-02 00:00:00",sep=""))),
-                                                                tariff=="day"~decimal_date(ymd_hms(paste(year,"-07-02 08:00:00",sep=""))),
-                                                                tariff=="peak"~decimal_date(ymd_hms(paste(year,"-07-01 17:00:00",sep="")))
-  )}
-
-  tou_prices <- tou_prices %>% mutate(yeartime=midyear(year,tariff)) %>% ungroup() %>% select(-year)
-
-  ts <- prices %>% select(datetime,tariff) %>% mutate(yeartime=decimal_date(datetime))
-  #
-  flat_prices <- ts %>% left_join(flat_prices) %>% mutate(price = zoo::na.approx(price, rule = 2))
-  flat_prices$tariff_plan <- "flat"
-  flat_prices <- flat_prices %>% select(-yeartime)
-  #
-  #ts <- prices %>% select(datetime,tariff) %>% mutate(yeartime=decimal_date(datetime))
-  tou_prices <- ts %>% left_join(tou_prices) %>% arrange(tariff,yeartime) %>% group_by(tariff) %>% mutate(price = zoo::na.approx(price, rule = 2))
-  tou_prices$tariff_plan <- "tou"
-  tou_prices <- tou_prices %>% dplyr::select(-yeartime)
-
-  bind_rows(flat_prices,tou_prices,dyn_prices)
-
-}
-
-
-#mean tou prices paid per year
-tou_prices <- prices %>% group_by(year=year(datetime),tariff) %>% summarise(dynamic_lp1=sum(lp1*dynamic_price)/sum(lp1),dynamic_lp2=sum(lp2*dynamic_price)/sum(lp2),
-                                                       dynamic_lp3=sum(lp3*dynamic_price)/sum(lp3),dynamic_lp4=sum(lp4*dynamic_price)/sum(lp4))
-#
-tou_prices <- tou_prices %>% pivot_longer(c(-year,-tariff),names_to="profile",values_to="price")
-tou_prices %>% group_by(year,tariff) %>% summarise(price=mean(price))
-
 
 prices %>% group_by(year = year(datetime),tariff) %>% summarise(price=mean(dynamic_price)) %>% ggplot(aes(year,price,colour=tariff))+geom_line()
 
@@ -153,16 +78,18 @@ df %>% ggplot()+geom_line(aes(kWh,annual_bill_inflexible)) + geom_line(aes(kWh,a
 #gamma dependence
 
 df <- tibble()
-for(tariff in c("flat","tou","dynamic"))
-for(gamma in seq(0.1,10,by=0.25)){
-  df0 <- get_annual_cost(2030,8760,tariff,0,gamma,1,96,"LP1",prices_scen)
+for(tau in seq(24,96,by=12))
+for(gamma in c(0.1,0.25,0.5,0.75,1,2,5,10)){
+  df0 <- tariff_plan_bills(2030,8760,0.25,gamma,0.2,tau,"LP1",prices_scen)
+  df0$phi <- 0.25
   df0$gamma <- gamma
-  df0$tariff <- tariff
+  df0$eta <- 0.2
+  df0$tau <- tau
   df <- df %>% bind_rows(df0)
 }
 
 
-df %>% ggplot()+geom_line(aes(gamma,gain,colour=tariff)) #+ geom_line(aes(tau,annual_bill_flexible),colour="red") + scale_y_continuous(limits=c(2600,3600))
+df %>% filter(tau==96) %>% ggplot()+geom_line(aes(gamma,annual_bill,colour=tariff_plan)) + facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
 
 #tau dependence
 
@@ -193,21 +120,8 @@ for(tariff in c("flat","tou","dynamic"))
 
 df %>% ggplot()+geom_line(aes(phi,gain,colour=tariff)) #+ geom_line(aes(tau,annual_bill_flexible),colour="red") + scale_y_continuous(limits=c(2600,3600))
 
-
-#why is tou outperforming dynamic?
-prices <- sem_prices_2019_2025 %>% mutate(hour=hour(datetime)) %>% inner_join(tou_tariffs %>% rename("hour"=start))
-
-network_charges <- tibble(tariff=c("day","night","peak"),network=c(0.1981,0.0852,0.2255))
-#
-prices <- prices %>% inner_join(network_charges) %>% mutate(dynamic=network+price/1000*1.09)
-prices %>% group_by(tariff) %>% summarise(tou=mean(dynamic))
-
-prices %>% filter(year(datetime)==2025)
-
-prices <- prices %>% mutate(tou=case_when(tariff=="night"~night_tariff_fun(sD,decimal_date(datetime)),
-                                          tariff=="day"~day_tariff_fun(sD,decimal_date(datetime)),
-                                          tariff=="peak"~peak_tariff_fun(sD,decimal_date(datetime))))
-prices_tou <- prices %>% group_by(year=year(datetime),tariff) %>% summarise(price=mean(price)/1000,tou=mean(tou))
+prices_scen <- set_prices(sD)
+tariff_plan_bills(2025,8760,0.25,2,0.2,48,natural_profile="LP1",prices_scen)
 #
 
 
@@ -287,3 +201,16 @@ df %>% ggplot()+geom_line(aes(tau,flexibility,colour=tariff_plan)) + geom_point(
 score_cube <- flex_score_cube()
 
 result <- purrr::map(1:n, ~match_flex_params(25.4,score_cube)) |> dplyr::list_rbind()
+
+
+##############################
+# impact of cap
+##############################
+
+prices_scen <- set_prices(sD)
+
+prices_scen_no_cap <- set_prices(sD,cru_cap = FALSE)
+library(patchwork)
+g1 <- prices_scen %>% filter(tariff_plan=="dynamic") %>% ggplot(aes(datetime,price))+geom_line() + scale_y_continuous(limits=c(0,2))
+g2 <- prices_scen_no_cap %>% filter(tariff_plan=="dynamic") %>% ggplot(aes(datetime,price))+geom_line() + scale_y_continuous(limits=c(0,2))
+g1+g2

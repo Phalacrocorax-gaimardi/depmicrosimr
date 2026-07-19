@@ -4,7 +4,7 @@
 #' \describe{
 #'   \item{\code{county}}{character county}
 #'   \item{\code{area}}{character urban or rural}
-#'   \item{\code{yeartime}}{double decimal time}
+#'   \item{\code{rollout}}{double decimal time}
 #'}
 #' @details compiled using gemini AI
 "smart_meter_rollout"

@@ -4,7 +4,7 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(sD, start_year = 2019, prices_scen)
+initialise_agents(sD, start_year = 2019, prices_scen, social_network)
 }
 \arguments{
 \item{sD}{scenario design dataframe}
@@ -12,6 +12,8 @@ initialise_agents(sD, start_year = 2019, prices_scen)
 \item{start_year}{default 2019}
 
 \item{prices_scen}{tariff prices dataframe}
+
+\item{social_network}{social network}
 }
 \value{
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
@@ -22,9 +24,15 @@ sets the initial state variables at the beginning of each run (Jan 2019 before s
 14% of households are on the old (dual meter) day/night tariff.\cr
 \cr
 3-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).
+a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).\cr
+\cr
+Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
+\cr
+\cr
+The nework input is used to determine the social degree of each agent.
 }
 \examples{
 prices_scen <- set_prices(sD)
-initialise_agents(sD,2019,prices_scen)
+social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+initialise_agents(sD,2019,prices_scen,social_network)
 }
