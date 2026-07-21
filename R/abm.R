@@ -16,7 +16,7 @@
 #' \cr
 #' The nework input is used to determine the social degree of each agent.
 #'
-#' @param sD scenario design dataframe
+#' @param scen scenario design dataframe e.g. sD
 #' @param start_year default 2019
 #' @param prices_scen tariff prices dataframe
 #' @param social_network social network
@@ -27,7 +27,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network)
-initialise_agents <- function(sD, start_year=2019,prices_scen,social_network){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 
   #agents_in has a minimal set of survey data
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
@@ -59,8 +59,8 @@ initialise_agents <- function(sD, start_year=2019,prices_scen,social_network){
   #add flex params
   agents_in$eta <- 0.2
   #generate "flexibility scores" (hourly MAD load-shifting values) range from min_flex to max_flex%
-  min_flex <- sD %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)
-  max_flex <- sD %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)
+  min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)
+  max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)
   #scale heterogeneous flexibilities to lie between min_flex and max_flex
   agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
@@ -73,7 +73,7 @@ initialise_agents <- function(sD, start_year=2019,prices_scen,social_network){
   # reduced effect of quadratic
   #agents_in <- agents_in %>% dplyr::mutate(eta=eta*(8760/kWh), gamma=gamma*(8760/kWh))
   #rescale proactive: 0 to theta_max: theta_max very risk intolerant
-  theta_max <- sD %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
+  theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
   agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
   #assign natural profile codes : currently only an urban/rural profile
   agents_in <- agents_in %>% dplyr::mutate(natural_profile=dplyr::case_when(area=="Urban"~"lp1",
@@ -125,7 +125,7 @@ initialise_agents <- function(sD, start_year=2019,prices_scen,social_network){
 #' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
 #' #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
-#' #agents_2 <- update_agents(sD,2026+4/6,agents_in,prices_scen,social_network,quiet=FALSE)
+#' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,quiet=TRUE){
   #
@@ -268,7 +268,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
                                           #randomiise ICEV emissions assignment
                                           #choose segments
                                           microcal_run <- sample(1:100,1)
-                                          agents_in <- initialise_agents(sD,year_zero,microcal_run)
+                                          agents_in <- initialise_agents(scen,year_zero,microcal_run)
                                           u_empirical <- hp_empirical_utils %>% dplyr::filter(calibration_run==microcal_run) %>% dplyr::select(-calibration_run)
 
                                           #create a new artificial society for each run
@@ -289,7 +289,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
                                           for(t in seq(2,Nt)){
                                             #bi-monthly
                                             yeartime <- year_zero+(t-1)/6
-                                            agent_ts[[t]] <- update_agents(sD,yeartime,agent_ts[[t-1]],social_network=social,ignore_social,cal_run=microcal_run,quiet) #static social network, everything else static
+                                            agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],social_network=social,ignore_social,cal_run=microcal_run,quiet) #static social network, everything else static
                                           }
 
                                           for(t in 1:Nt) agent_ts[[t]]$t <- t
@@ -305,7 +305,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
 
     meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","rho.","r.","beta.","eta.","tau."),value=c(Nrun,simulation_end,p,nu,rho,r,beta,eta,tau))
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
-    return(list("abm"=abm,"scenario"=sD,"system"=meta))
+    return(list("abm"=abm,"scenario"=scen,"system"=meta))
   }
 
   #don't use parallel
@@ -329,11 +329,9 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
         society_new <- pv_society_oo[agent_resample,]
         society_new$ID <- 1:dim(pv_society_oo)[1]
         social <- make_artificial_society(society_new,homophily,5)
-
       }
       print(paste("initialising agents.."))
-      agents_in <- initialise_agents(sD,year_zero,prices_scen,social)
-
+      agents_in <- initialise_agents(scen,year_zero,prices_scen,social)
       #no transactions
       #agents_in$transaction <- FALSE
       agent_ts <- vector("list",Nt)
@@ -343,7 +341,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
         #
         #yeartime <- year_zero+(t-1)
         yeartime <- year_zero+(t-1)/6
-        agent_ts[[t]] <- update_agents(sD,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
+        agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
         #agent_ts[[t]] <- tibble::tibble(t=t)
       }
 
@@ -352,8 +350,8 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
       agent_ts <- purrr::list_rbind(agent_ts)
       agent_ts$simulation <- j
       #network degree
-      degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
-      agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
+      #degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
+      #agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
       abm <- dplyr::bind_rows(abm,agent_ts)
       #comment in next line for parallel
       #agent_ts
@@ -363,7 +361,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
     meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta."),value=c(Nrun,simulation_end,p.,nu.,theta.))
     #replace "t" with dates
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
-    return(list("abm"=abm,"scenario"=sD,"system"=meta))
+    return(list("abm"=abm,"scenario"=scen,"system"=meta))
   }
 
 }

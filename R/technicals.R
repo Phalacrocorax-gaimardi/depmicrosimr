@@ -333,6 +333,7 @@ decompose_logprices <- function(price_data){
   dcmp_clean %>% return()
 }
 
+
 #' generate_logprice_hmm
 #'
 #' creates an n state hidden Markov model based on residuals extracted from decompose_logprices. The default is three states,
@@ -343,7 +344,7 @@ decompose_logprices <- function(price_data){
 #' logprice residuals.\cr
 #' \cr
 #' It is not necessary to run this function at the beginning of each simulation run. The 2019-2025 calibration is in
-#' the depmixS4 model hmm_fit.
+#' the model hmm_fit.
 #'
 #' @param dcmp decomposed logprices from decompose_logprices()
 #' @param n_states number of Markov states, default 3
@@ -356,12 +357,12 @@ decompose_logprices <- function(price_data){
 #' dcmp <- decompose_logprices(sem_prices_2019_2025)
 #' generate_logprice_hmm(dcmp,n_state=3)
 #'
-generate_logprice_hmm <- function(dcmp,n_states=3,winsor=0.01){
-  #
-  #outlier caps
-  lower_bound <- quantile(dcmp$remainder, winsor)
-  upper_bound <- quantile(dcmp$remainder, 1-winsor)
-  #
+generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.02) {
+
+  # 1. Outlier caps (Winsorization)
+  lower_bound <- quantile(dcmp$remainder, winsor, na.rm = TRUE)
+  upper_bound <- quantile(dcmp$remainder, 1 - winsor, na.rm = TRUE)
+
   dcmp_clipped <- dcmp %>%
     dplyr::mutate(remainder = dplyr::case_when(
       remainder > upper_bound ~ upper_bound,
@@ -369,11 +370,74 @@ generate_logprice_hmm <- function(dcmp,n_states=3,winsor=0.01){
       TRUE ~ remainder
     ))
 
-  model <- depmixS4::depmix(remainder ~ 1, nstates = n_states, data = dcmp_clipped)
-  fit_model <- depmixS4::fit(model)
-  summary(fit_model)
-  print(paste("BIC score", n_states, "states",BIC(fit_model)))
-  return(fit_model)
+  x <- dcmp_clipped$remainder
+
+  # 2. Define Initial Parameters for HiddenMarkov
+  # Initial state transition matrix (high diagonal probability = state persistence)
+  Pi <- matrix((1 - 0.8) / (n_states - 1), nrow = n_states, ncol = n_states)
+  diag(Pi) <- 0.8
+
+  # Initial state probabilities (uniform)
+  delta <- rep(1 / n_states, n_states)
+
+  # Initial distribution parameters (means evenly spread across data quantiles)
+  probs <- seq(1 / (n_states + 1), n_states / (n_states + 1), length.out = n_states)
+  init_means <- as.numeric(quantile(x, probs = probs, na.rm = TRUE))
+  init_sds <- rep(sd(x, na.rm = TRUE), n_states)
+
+  pm <- list(mean = init_means, sd = init_sds)
+
+  # 3. Build & Fit Model
+  model <- HiddenMarkov::dthmm(
+    x = x,
+    Pi = Pi,
+    delta = delta,
+    distn = "norm",
+    pm = pm
+  )
+
+  # BaumWelch is the EM algorithm
+  hmm_fit <- HiddenMarkov::BaumWelch(model)
+
+  Pi <- hmm_fit$Pi
+  delta <- hmm_fit$delta
+  mu <- hmm_fit$pm$mean
+  sigma <- hmm_fit$pm$sd
+  #return(fit_model)
+  return(list("pi_mat"=Pi,"delta"=delta,"mu"=mu,"sigma"=sigma))
+
+}
+
+#' simulate hmm
+#'
+#' Utility function to simulate hidden markov time-series in base R. Used by dynamic_prices()
+#'
+#' @param n_steps length of time-series
+#' @param hmm_fit listof HMM parameters
+#'
+#' @returns vector of values of length n_steps
+#' @export
+#'
+#' @examples
+#' simulate_hmm(100,hmm_fit)
+#'
+simulate_hmm <- function(n_steps, hmm_fit) {
+  # 1. Pre-allocate the state vector for speed
+  states <- integer(n_steps)
+
+  n_states <- dim(hmm_fit$pi_mat)[1]
+  # 2. Draw the first state using initial probabilities (delta)
+  states[1] <- sample(1:n_states, size = 1, prob = hmm_fit$delta)
+
+  # 3. Loop to draw subsequent states using the transition matrix (Pi)
+  # Base R loops are very fast for sequences of this size (~130k hours)
+  for (t in 2:n_steps) {
+    states[t] <- sample(1:n_states, size = 1, prob = hmm_fit$pi_mat[states[t-1], ])
+  }
+  # 4. Vectorized draw of emissions (simulated prices) based on the state sequence
+  sim_series <- rnorm(n_steps, mean = hmm_fit$mu[states], sd = hmm_fit$sigma[states])
+
+  return(sim_series)
 }
 
 #' dynamic_prices
@@ -409,21 +473,9 @@ dynamic_prices <- function(scen,end_year=2040){
   hourly_sequence <- seq(from = t1, to = t2, by = "1 hour")
 
   sim_length <- length(hourly_sequence)
-  dummy_df <- data.frame(detrended = rep(0, sim_length))
 
-  #new model framework
-  n_states <- hmm_fit@nstates
-  extended_model <- depmixS4::depmix(detrended ~ 1, nstates = n_states, data = dummy_df)
-  #copy the fitted parameters
-  extended_model <- depmixS4::setpars(extended_model, depmixS4::getpars(hmm_fit))
-  #
-  sim <- depmixS4::simulate(extended_model, nsim = 1)
-  # Extract your new long series
-  sim_series <- sim@response[[1]][[1]]@y[,1]
-  #sim_states <- sim@states
-  # sim_data now contains:
-  # 1. The sequence of "Hidden States" (State 1, 2, or 3)
-  # 2. The "Observed" synthetic prices
+  sim_series <- simulate_hmm(sim_length, depmicrosimr::hmm_fit)
+
   sim_logprices <-  tibble::tibble(datetime=hourly_sequence,sim=sim_series)
   #seasonal factors
   daily_lookup <- sem_logprices_2019_2025_decomp %>% tibble::as_tibble() %>%
@@ -483,7 +535,7 @@ dynamic_prices <- function(scen,end_year=2040){
   #linearly interp
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
 
-  sim_logprices <- sim_logprices %>% dplyr::inner_join(trend_logprices) %>% dplyr::inner_join(seasonal_logprices)
+  sim_logprices <- sim_logprices %>% dplyr::inner_join(trend_logprices,by="datetime") %>% dplyr::inner_join(seasonal_logprices,by="datetime")
 
   sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)/1000) %>% dplyr::select(datetime,price)
   sim_prices$regime <- "simulated"
@@ -518,10 +570,10 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
   end <- lubridate::date_decimal(end_year+1)
   ts <- tibble::tibble(datetime=seq(start,end,by="hour"))
   tou <- tou_tariffs %>% dplyr::rename("hour"=start) %>% dplyr::rename("tou"=tariff) %>% dplyr::select(-end)
-  ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou) %>% dplyr::select(-hour)
+  ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou,by="hour") %>% dplyr::select(-hour)
 
   dynamic <- dynamic_prices(scen,end_year) %>% dplyr::select(-regime)
-  ts %>% dplyr::inner_join(dynamic)
+  ts %>% dplyr::inner_join(dynamic,by="datetime")
   #impose a price cap
   #cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
   #dynamic <- dynamic %>% dplyr::mutate(price_cap = cap_scale*flat_tariff_fun(sD,lubridate::decimal_date(datetime)))

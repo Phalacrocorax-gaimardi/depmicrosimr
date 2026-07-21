@@ -3,6 +3,20 @@ library(tidyverse)
 library(patchwork)
 library(ggthemes)
 
+scen <- sD
+scen <- scen %>% mutate(value=replace(value,parameter=="theta.",0))
+
+abm_theta_0.1 <- test
+write_rds(abm_theta_0.1,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.1.RData")
+
+abm_theta_0.0 <- runABM(scen,1,2040)
+
+uptake <- abm_theta_0.0[[1]] %>% group_by(date) %>% count(tariff_plan)
+
+g <- uptake %>% ggplot(aes(date,n/1217,fill=tariff_plan))+geom_area() +theme_minimal()
+g <- g + scale_fill_canva(palette = "Fun and cheerful") + geom_vline(xintercept = ymd("2026-01-01"),linetype="dotted")
+export::graph2ppt(g,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/hello_world.ppt")
+
 prices_scen <- set_prices(sD)
 
 g1 <- prices %>% filter(tariff_plan=="dynamic") %>% ggplot(aes(datetime,price, colour=(year(datetime)>2025)))+geom_line()

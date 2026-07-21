@@ -46,5 +46,5 @@ social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 
 #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
-#agents_2 <- update_agents(sD,2026+4/6,agents_in,prices_scen,social_network,quiet=FALSE)
+#agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 }

@@ -140,14 +140,12 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,precision=
 #' get_price_load_scen(sD)
 get_price_load_scen <- function(scen,start_year=2019,end_year=2040){
 
-  load_profiles <- load_profiles %>%
-    dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>%
-    dplyr::select(-datetime,-day_note)
+  load_profiles_1 <- load_profiles %>% dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>% dplyr::select(-datetime,-day_note)
 
   prices_scen <- get_sem_prices(scen,start_year,end_year)
   prices_scen %>%
     dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>%
-    dplyr::inner_join(load_profiles, by = "mdh") %>%
+    dplyr::inner_join(load_profiles_1, by = "mdh") %>%
     dplyr::select(-mdh)
 }
 
@@ -307,7 +305,7 @@ set_prices <- function(scen,cru_cap=TRUE){
   #sem prices
   prices <- get_price_load_scen(scen) %>% dplyr::select(-tou)
 
-  prices <- prices %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou_tariffs %>% dplyr::rename("hour"=start)) %>% dplyr::rename("sem"=price)
+  prices <- prices %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou_tariffs %>% dplyr::rename("hour"=start),by="hour") %>% dplyr::rename("sem"=price)
 
   prices <- prices %>% dplyr::mutate(y=lubridate::decimal_date(datetime),network_price=dplyr::case_when(tariff=="night"~night_network_charge_fun(scen,y),
                                                       tariff=="day"~day_network_charge_fun(scen,y),
@@ -331,7 +329,7 @@ set_prices <- function(scen,cru_cap=TRUE){
   #average over load profiles
   flat_prices <- flat_prices %>% tidyr::pivot_longer(-year,names_to="profile",values_to="price")
   flat_prices <- flat_prices %>% dplyr::group_by(year) %>% dplyr::summarise(price=mean(price))
-  flat_prices <- flat_prices %>% dplyr::inner_join(tidyr::expand_grid(year=flat_prices$year,tariff=c("day","night","peak")))
+  flat_prices <- flat_prices %>% dplyr::inner_join(tidyr::expand_grid(year=flat_prices$year,tariff=c("day","night","peak")),by="year")
   flat_prices <- flat_prices %>% dplyr::mutate(yeartime=midyear(year,tariff)) %>% dplyr::ungroup() %>% dplyr::select(-year)
 
   #tou prices
@@ -346,16 +344,16 @@ set_prices <- function(scen,cru_cap=TRUE){
 
   ts <- prices %>% dplyr::select(datetime,tariff) %>% dplyr::mutate(yeartime=lubridate::decimal_date(datetime))
   #
-  flat_prices <- ts %>% dplyr::left_join(flat_prices) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
+  flat_prices <- ts %>% dplyr::left_join(flat_prices,by=c("tariff","yeartime")) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
   flat_prices$tariff_plan <- "flat"
   flat_prices <- flat_prices %>% dplyr::select(-yeartime)
   #
   #ts <- prices %>% select(datetime,tariff) %>% mutate(yeartime=decimal_date(datetime))
-  tou_prices <- ts %>% dplyr::left_join(tou_prices) %>% dplyr::arrange(tariff,yeartime) %>% dplyr::group_by(tariff) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
+  tou_prices <- ts %>% dplyr::left_join(tou_prices,by=c("tariff","yeartime")) %>% dplyr::arrange(tariff,yeartime) %>% dplyr::group_by(tariff) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
   tou_prices$tariff_plan <- "tou"
   tou_prices <- tou_prices %>% dplyr::select(-yeartime)
 
-  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(load_profiles_generalised)
+  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(load_profiles_generalised,by=c("tariff","datetime"))
   #apply VAT to all prices
   result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tariff))
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price)

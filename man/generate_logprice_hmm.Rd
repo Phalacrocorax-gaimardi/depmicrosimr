@@ -4,7 +4,7 @@
 \alias{generate_logprice_hmm}
 \title{generate_logprice_hmm}
 \usage{
-generate_logprice_hmm(dcmp, n_states = 3, winsor = 0.01)
+generate_logprice_hmm(dcmp, n_states = 3, winsor = 0.02)
 }
 \arguments{
 \item{dcmp}{decomposed logprices from decompose_logprices()}
@@ -25,7 +25,7 @@ because outliers lead to an overestimation of standard deviation. The workaround
 logprice residuals.\cr
 \cr
 It is not necessary to run this function at the beginning of each simulation run. The 2019-2025 calibration is in
-the depmixS4 model hmm_fit.
+the model hmm_fit.
 }
 \examples{
 dcmp <- decompose_logprices(sem_prices_2019_2025)

@@ -4,10 +4,10 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(sD, start_year = 2019, prices_scen, social_network)
+initialise_agents(scen, start_year = 2019, prices_scen, social_network)
 }
 \arguments{
-\item{sD}{scenario design dataframe}
+\item{scen}{scenario design dataframe e.g. sD}
 
 \item{start_year}{default 2019}
 

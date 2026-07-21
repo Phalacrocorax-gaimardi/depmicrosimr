@@ -1,7 +1,7 @@
 Package: depmicrosimr
 Type: Package
 Title: Agent-based simulations of the uptake of dynamic electricity pricing tariffs by Irish households
-Version: 0.1.12
+Version: 0.1.13
 Authors@R: c(
     person(
       "Pranay", "Kumar",
@@ -21,7 +21,7 @@ Encoding: UTF-8
 LazyData: true
 Imports: 
     cluster,
-    depmixS4,
+    HiddenMarkov,
     dplyr,
     fabletools,
     feasts,
