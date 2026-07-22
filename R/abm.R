@@ -227,7 +227,6 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @export
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
-#' @importFrom foreach %dopar%
 #'
 runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_cores=2, use_parallel=F,ignore_social=F, quiet=TRUE){
   #
@@ -241,129 +240,81 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
   #seai_elec <- pvbessmicrosimr::seai_elec
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
-  #annual runs
-  #Nt <- round((simulation_end-year_zero+1))
-  #agents0 <- agents_i
-  #cal_run <- 40
-  #u_empirical <- empirical_utils_oo %>% dplyr::filter(calibration==cal_run) %>% dplyr::select(-calibration)
+  #single worker (abm run idex j)
+  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,quiet){
 
-  if(use_parallel){
-    #clean exit
+    print(paste("Generating price simulation for run",j,"...."))
+    prices_scen <- set_prices(scen)
     #
-    number_of_cores <- parallel::detectCores() - n_unused_cores
-    cl <- parallel::makeCluster(number_of_cores)
-    doParallel::registerDoParallel(cl)
+    print(paste("Generating social network for run",j,"...."))
+    if(!resample_society) social <- make_artificial_society(dep_society_1,homophily,4.5)
 
-    on.exit({
-      doParallel::stopImplicitCluster()  # 1. Unregister from doParallel
-      parallel::stopCluster(cl)
-      foreach::registerDoSEQ()
-      cl <- NULL}
-    )
+    if(resample_society){
+      agent_resample <- sample(1:dim(dep_society_1)[1],replace=T)
+      society_new <- dep_society_1[agent_resample,]
+      society_new$ID <- 1:dim(dep_society_1)[1]
+      social <- make_artificial_society(society_new,homophily,4.5)
+    }
+    print(paste("initialising agents.."))
+    agents_in <- initialise_agents(scen,year_zero,prices_scen,social)
+    #no transactions
+    #agents_in$transaction <- FALSE
+    agent_ts <- vector("list",Nt)
+    agent_ts[[1]] <- agents_in #agent parameters with regularized weights
 
-    abm <- foreach::foreach(j = 1:Nrun, .packages = "dplyr", .combine=dplyr::bind_rows,
-                            .export = c("initialise_agents","update_agents","make_artificial_society","heat_pump_upgrade_savings")) %dopar% {
-                                          #abm <- foreach::foreach(j = 1:Nrun, .errorhandling = "pass",.export = c("initialise_agents","update_agents4")) %dopar% {
-
-                                          #randomiise ICEV emissions assignment
-                                          #choose segments
-                                          microcal_run <- sample(1:100,1)
-                                          agents_in <- initialise_agents(scen,year_zero,microcal_run)
-                                          u_empirical <- hp_empirical_utils %>% dplyr::filter(calibration_run==microcal_run) %>% dplyr::select(-calibration_run)
-
-                                          #create a new artificial society for each run
-                                          print(paste("Generating network for run",j,"...."))
-                                          if(!resample_society) social <- make_artificial_society(dep_society_1 %>% dplyr::filter(serial %in% agents_in$serial),homophily,4.5)
-                                          if(resample_society){
-                                            agent_resample <- sample(1:dim(dep_society_1)[1],replace=T)
-                                            society_new <- society[agent_resample,]
-                                            society_new$ID <- 1:dim(dep_society_1)[1]
-                                            social <- make_artificial_society(society_new,homophily,4.5)
-                                          }
-
-                                          #no transactions
-                                          #agents_in$transaction <- FALSE
-                                          agent_ts <- vector("list",Nt)
-                                          agent_ts[[1]] <- agents_in #agent parameters with regularized weights
-
-                                          for(t in seq(2,Nt)){
-                                            #bi-monthly
-                                            yeartime <- year_zero+(t-1)/6
-                                            agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],social_network=social,ignore_social,cal_run=microcal_run,quiet) #static social network, everything else static
-                                          }
-
-                                          for(t in 1:Nt) agent_ts[[t]]$t <- t
-                                          #agent_ts <- tibble::as_tibble(data.table::rbindlist(agent_ts,fill=T))
-                                          agent_ts <- purrr::list_rbind(agent_ts)
-                                          agent_ts$simulation <- j
-                                          #add vertex degree
-                                          degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
-                                          agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
-                                          agent_ts
-                                        }
-    #gc(full = TRUE, verbose = FALSE)
-
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","rho.","r.","beta.","eta.","tau."),value=c(Nrun,simulation_end,p,nu,rho,r,beta,eta,tau))
-    abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
-    return(list("abm"=abm,"scenario"=scen,"system"=meta))
-  }
-
-  #don't use parallel
-  #comment in next two lines for parallel
-  if(!use_parallel){
-
-    abm <- tibble::tibble()
-    #number_of_cores <- parallel::detectCores() - n_unused_cores
-    #doParallel::registerDoParallel(number_of_cores)
-    #comment out next line for parallel
-    for(j in 1:Nrun){
-      #generate a new set of prices and a new network
-      print(paste("Generating price simulation for run",j,"...."))
-      prices_scen <- set_prices(scen)
+    for(t in seq(2,Nt)){
       #
-      print(paste("Generating social network for run",j,"...."))
-      if(!resample_society) social <- make_artificial_society(dep_society_1,homophily,4.5)
-
-      if(resample_society){
-        agent_resample <- sample(1:dim(pv_society_oo)[1],replace=T)
-        society_new <- pv_society_oo[agent_resample,]
-        society_new$ID <- 1:dim(pv_society_oo)[1]
-        social <- make_artificial_society(society_new,homophily,5)
-      }
-      print(paste("initialising agents.."))
-      agents_in <- initialise_agents(scen,year_zero,prices_scen,social)
-      #no transactions
-      #agents_in$transaction <- FALSE
-      agent_ts <- vector("list",Nt)
-      agent_ts[[1]] <- agents_in #agent parameters with regularized weights
-
-      for(t in seq(2,Nt)){
-        #
-        #yeartime <- year_zero+(t-1)
-        yeartime <- year_zero+(t-1)/6
-        agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
-        #agent_ts[[t]] <- tibble::tibble(t=t)
-      }
-
-      for(t in 1:Nt) agent_ts[[t]]$t <- t
-      #agent_ts <- tibble::as_tibble(data.table::rbindlist(agent_ts,fill=T))
-      agent_ts <- purrr::list_rbind(agent_ts)
-      agent_ts$simulation <- j
-      #network degree
-      #degrees <- tibble::tibble(serial=social %>% tibble::as_tibble() %>% dplyr::pull(serial),degree=igraph::degree(social))
-      #agent_ts <- agent_ts %>% dplyr::inner_join(degrees)
-      abm <- dplyr::bind_rows(abm,agent_ts)
-      #comment in next line for parallel
-      #agent_ts
+      #yeartime <- year_zero+(t-1)
+      yeartime <- year_zero+(t-1)/6
+      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
+      #agent_ts[[t]] <- tibble::tibble(t=t)
     }
 
+    for(t in 1:Nt) agent_ts[[t]]$t <- t
+    #agent_ts <- tibble::as_tibble(data.table::rbindlist(agent_ts,fill=T))
+    agent_ts <- purrr::list_rbind(agent_ts)
+    agent_ts$simulation <- j
+    return(agent_ts)
+  }
+
+  if(use_parallel & .Platform$OS.type == "windows"){
+
+      number_of_cores <- parallel::detectCores() - n_unused_cores
+      cl <- parallel::makeCluster(number_of_cores)
+      on.exit(parallel::stopCluster(cl), add = TRUE)
+      #exports
+      parallel::clusterEvalQ(cl, library(depmicrosimr))
+      abm <- parallel::parLapply(cl, 1:Nrun, run_single,scen = scen,
+                                 year_zero = year_zero,
+                                 Nt = Nt,
+                                 resample_society = resample_society,
+                                 ignore_social = ignore_social,
+                                 quiet = quiet)
+      parallel::stopCluster(cl)
+    }
+  #should run seamlessly on linux or Mac
+    if(use_parallel & .Platform$OS.type != "windows"){
+      number_of_cores <- parallel::detectCores() - n_unused_cores
+      abm <- parallel::mclapply(1:Nrun, run_single.mc.cores=number_of_cores)
+    }
+
+
+    #don't use parallel
+    if(!use_parallel) abm <- lapply(1:Nrun,run_single,scen = scen,
+                                    year_zero = year_zero,
+                                    Nt = Nt,
+                                    resample_society = resample_society,
+                                    ignore_social = ignore_social,
+                                    quiet = quiet)
+
+
+    closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
     meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta."),value=c(Nrun,simulation_end,p.,nu.,theta.))
     #replace "t" with dates
+    abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
     return(list("abm"=abm,"scenario"=scen,"system"=meta))
   }
-
-}
 
 

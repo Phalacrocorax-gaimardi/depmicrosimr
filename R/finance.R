@@ -140,7 +140,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,precision=
 #' get_price_load_scen(sD)
 get_price_load_scen <- function(scen,start_year=2019,end_year=2040){
 
-  load_profiles_1 <- load_profiles %>% dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>% dplyr::select(-datetime,-day_note)
+  load_profiles_1 <- depmicrosimr::load_profiles %>% dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>% dplyr::select(-datetime,-day_note)
 
   prices_scen <- get_sem_prices(scen,start_year,end_year)
   prices_scen %>%
@@ -178,7 +178,7 @@ get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta
   #
   stopifnot(tariff_plan %in% c("flat","tou","toy_old","dynamic"))
   profile <- tolower(natural_profile)
-  load <- load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
+  load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
   #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
   prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
   # 1. Fast date boundary calculation
@@ -353,7 +353,7 @@ set_prices <- function(scen,cru_cap=TRUE){
   tou_prices$tariff_plan <- "tou"
   tou_prices <- tou_prices %>% dplyr::select(-yeartime)
 
-  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(load_profiles_generalised,by=c("tariff","datetime"))
+  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tariff","datetime"))
   #apply VAT to all prices
   result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tariff))
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price)
@@ -385,7 +385,7 @@ net_prices <- function(scen){
                      tariff=="peak"~lubridate::decimal_date(lubridate::ymd_hms(paste(year,"-07-01 17:00:00",sep="")))
     )}
   #sem prices
-  prices <- load_profiles_generalised %>% dplyr::select(datetime,tariff)
+  prices <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,tariff)
 
   prices <- prices %>% dplyr::mutate(y=lubridate::decimal_date(datetime),network_price=dplyr::case_when(tariff=="night"~night_network_charge_fun(scen,y),
                                                                                                         tariff=="day"~day_network_charge_fun(scen,y),
