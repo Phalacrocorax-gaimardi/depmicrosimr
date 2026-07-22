@@ -295,7 +295,13 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
   #should run seamlessly on linux or Mac
     if(use_parallel & .Platform$OS.type != "windows"){
       number_of_cores <- parallel::detectCores() - n_unused_cores
-      abm <- parallel::mclapply(1:Nrun, run_single.mc.cores=number_of_cores)
+      abm <- parallel::mclapply(1:Nrun, run_single,scen = scen,
+                                year_zero = year_zero,
+                                Nt = Nt,
+                                resample_society = resample_society,
+                                ignore_social = ignore_social,
+                                quiet = quiet,
+                                mc.cores=number_of_cores)
     }
 
 
