@@ -3,8 +3,9 @@ library(tidyverse)
 library(patchwork)
 library(ggthemes)
 
-social <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 prices_scen <- set_prices(sD)
+
+social <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 agents_in <- initialise_agents(sD,2019,prices_scen,social)
 
 scen <- sD
@@ -12,7 +13,7 @@ scen <- scen %>% mutate(value=replace(value,parameter=="theta.",0.2))
 abm_theta_0.2 <- runABM(scen,4,2040,use_parallel = T)
 
 abm_theta_0.1 <- read_rds("~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.1.RData")
-#write_rds(abm_theta_0.0,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.0.RData")
+#write_rds(abm_theta_0.2,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.0.RData")
 
 
 
@@ -34,25 +35,39 @@ g3 <- prices %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(dateti
 g3 <- g3 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,1))
 #export::graph2ppt(g1,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/heteroskedastic_prices.png")
 #
-demand <- prices
+demand <- prices_scen
 demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2035)
 demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
-demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
+demand <- demand %>% dplyr::filter(tariff_plan=="dynamic") %>% dplyr::select(datetime,price,load)
 
-week_no <- 42
-g3 <- prices %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(datetime)==week_no) %>% ggplot(aes(datetime,price)) +geom_line(colour="grey60",linewidth=1.2)
+
+week_no <- 32
+g3 <- prices_scen %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(datetime)==week_no) %>% ggplot(aes(datetime,price)) +geom_line(colour="grey60",linewidth=1.2)
 g3 <- g3 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,0.75))
-test <- get_flex(demand,phi=0.25,gamma=10,eta=1,tau=96)
+
+test <- get_flex(demand,phi=0,gamma=10,eta=2,tau=12,kernel="exp")
+g0 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
+g0 <- g0 + geom_line(aes(datetime,load_opt),colour="red",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g0 <- g0 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
+
+test <- get_flex(demand,phi=0,gamma=10,eta=2,tau=24,kernel="exp")
 g1 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
 g1 <- g1 + geom_line(aes(datetime,load_opt),colour="red",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
-g1 <- g1 + theme_minimal() + scale_colour_canva() #+ scale_y_continuous(limits=c(0,1))
-test <- get_flex(demand,phi=0.25,gamma=3,eta=1,tau=96)
+g1 <- g1 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
+
+test <- get_flex(demand,phi=0.,gamma=10,eta=2,tau=36,kernel="exp")
 g2 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
 g2 <- g2 + geom_line(aes(datetime,load_opt),colour="blue",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
-g2 <- g2 + theme_minimal() + scale_colour_canva() #+ scale_y_continuous(limits=c(0,1))
-g3/g1/g2
-export::graph2ppt(g3/g1/g2,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/load_shifting.png")
+g2 <- g2 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
+
+test <- get_flex(demand,phi=0.,gamma=10,eta=2,tau=48,kernel="exp")
+g4 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
+g4 <- g4 + geom_line(aes(datetime,load_opt),colour="blue",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g4 <- g4 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(-0.1,2.5))
+
+g3/g0/g1/g2/g4
+#export::graph2ppt(g3/g1/g2,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/load_shifting.png")
 
 
 export::graph2ppt(g1 + g2,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/heteroskedastic_prices.png")
@@ -87,6 +102,11 @@ tou_prices %>% ggplot(aes(year,tou,colour=tariff))+geom_line()
 
 prices_scen %>% filter(tariff_plan=="dynamic") %>% ggplot(aes(datetime,price,colour=tariff_plan))+geom_line()
 
+##########################
+# costs
+##############################
+
+
 #load dependence
 df <- tibble()
 for(kWh in seq(1000,20000,by=1000)){
@@ -119,27 +139,35 @@ df1 <- df %>%  filter(tariff_plan != "flat") %>% pivot_wider(names_from="tariff_
 g <- df1 %>% filter(gamma < 10) %>% ggplot(aes(gamma,dyn_savings,colour=factor(tau)))+geom_line() #+ facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
 g + theme_minimal() + scale_colour_tableau() + geom_point()
 
-#tau dependence
+#phi-tau dependence
 
+phi <- 0.5
 df <- tibble()
-for(tariff in c("flat","tou","dynamic"))
-  for(tau in seq(12,96,by=12)){
-    df0 <- get_annual_cost_fast(2030,8760,tariff,0.5,2,1,tau,"LP1",prices_scen)
-    df0$tau <- tau
-    df0$tariff <- tariff
+for(tariff_plan in c("flat","tou","dynamic"))
+  for(eta %in% c(0.1,0.5,1,2))
+ for(phi in seq(0,0.8,by=2))
+  for(tau in seq(3,72,by=3)){
+    df0 <- get_full_annual_cost(2030,8760,tariff_plan,0.2,10,eta,tau,"exp","LP1",prices_scen)
+    #df0$tau <- tau
+    #df0$tariff <- tariff
     df <- df %>% bind_rows(df0)
   }
 
 
-df %>% ggplot()+geom_line(aes(tau,gain,colour=tariff)) #+ geom_line(aes(tau,annual_bill_flexible),colour="red") + scale_y_continuous(limits=c(2600,3600))
+g <- df  %>% ggplot(aes(tau,annual_bill_flexible,colour=tariff_plan))+geom_line() #+ facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
+g + theme_minimal() + scale_colour_tableau() + geom_point() + facet_wrap(.~phi)
+
+
+
+df %>% ggplot()+geom_line(aes(tau,annual_bill_flexible,colour=tariff)) #+ geom_line(aes(tau,annual_bill_flexible),colour="red") + scale_y_continuous(limits=c(2600,3600))
 
 
 #phi dependence
 
 df <- tibble()
 for(tariff in c("flat","tou","dynamic"))
-  for(phi in seq(0,1,by=0.1)){
-    df0 <- get_annual_cost(2030,8760,tariff,phi,0.25,1,24,"LP1",prices_scen)
+  for(phi in seq(0,0.9,by=0.1)){
+    df0 <- get_annual_cost(2030,8760,tariff,phi,10,1,24,"LP1",prices_scen)
     df0$phi <- phi
     df0$tariff <- tariff
     df <- df %>% bind_rows(df0)
@@ -171,38 +199,64 @@ test <- get_flex(demand,phi=0.5,gamma=0.5*8760/kWh,eta=8760/kWh,tau=48)
 
 test %>% filter(week(datetime)==20) %>% ggplot()+geom_line(aes(datetime,load))+geom_line(aes(datetime,load_opt),colour="red")
 
-prices_scen <- get_tariff_prices(sD)
-get_annual_cost(2030,w,tariff="tou",prices_scen=prices_scen)
+prices_scen <- set_prices(sD)
+get_annual_cost(2030,8760,tariff="tou",prices_scen=prices_scen)
 #
 
-get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,profile="LP1",prices_scen){
+get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,profile="LP1",prices_scen){
   #
   demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==year)
   demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,tolower(profile)))
   demand <- demand %>% dplyr::mutate(load=kWh*lp1) %>% dplyr::select(-lp1)
   demand <- demand %>% dplyr::filter(tariff_plan==.env$tariff_plan) %>% dplyr::select(datetime,price,load)
-  flex <- get_flex(demand,phi,gamma,eta,tau,precision = 1e-3)
-  flex_hourly <- 100*sum(abs((flex$load_opt-flex$load)))/kWh
+  flex <- get_flex(demand,phi,gamma,eta,tau,kernel,precision = 1e-3)
+  flex_1hr <- 100*sum(abs((flex$load_opt-flex$load)))/kWh
+  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "3 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_3hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "6 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_6hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "12 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_12hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "24 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_24hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+
   flex1 <- flex %>% dplyr::group_by(lubridate::yday(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_interday <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
   flex1 <- flex %>% dplyr::group_by(lubridate::week(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_interweek <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
-  tibble::tibble(tariff_plan=tariff_plan,profile=profile,phi=phi,gamma=gamma,eta=eta,tau=tau,flex_hour=flex_hourly,flex_day=flex_interday,flex_week=flex_interweek)
+  tibble::tibble(tariff_plan=tariff_plan,profile=profile,phi=phi,gamma=gamma,eta=eta,tau=tau,flex_1hr=flex_1hr,flex_3hr=flex_3hr,flex_6hr=flex_6hr,flex_12hr=flex_12hr,flex_24hr=flex_24hr,flex_day=flex_interday,flex_week=flex_interweek)
 }
 
-get_flex_scores(sD,2026,8760,"tou",0,0,0.5,48,profile="LP1",prices_scen)
+get_flex_scores(sD,2026,8760,"tou",0,1,1,48,"cauchy",profile="LP1",prices_scen)
 
-get_flex_scores(sD,2026,8760,"tou",0,0.1,0.5,48,profile="LP1",prices_scen)
+get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_scen)
+
+#test gamma-tau scaling
+
+
+gamma <- 10
+flex_scores_new <- tibble()
+for(eta in c(0.1,0.5,1,2))
+for(tariff_plan in c("tou","dynamic"))
+  for(phi in seq(0,0.8,by=0.2))
+   # for(gamma in c(1,10,20,50))
+      for(tau in c(6,12,18,24,30,36,48,60,72))
+      {
+          print(paste("phi=",phi,"tau=",tau))
+          flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"exp","LP1",prices_scen))
+        }
+
 
 #make flex scores table
+eta <- 1
 flex_scores_new <- tibble()
 for(tariff_plan in c("tou","dynamic"))
- for(phi in seq(0,1,by=0.2))
-  for(gamma in c(0,0.1,0.25,0.5,1,2,5,20))
-    for(tau in 120)
+ for(phi in seq(0,0.8,by=0.2))
+  for(gamma in c(0,0.1,0.25,0.5,1,2,5,10,20))
+    for(tau in c(24,48,72,96))
       for(eta in c(0.1,0.2,0.5,1,2)){
       print(paste("gamma=",gamma))
-      flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"LP1",prices_scen))
+      flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"matern","LP1",prices_scen))
       }
 
 #write_csv(flex_scores_new,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
@@ -229,6 +283,8 @@ df %>% ggplot()+geom_line(aes(tau,flexibility,colour=tariff_plan)) + geom_point(
 score_cube <- flex_score_cube()
 
 result <- purrr::map(1:n, ~match_flex_params(25.4,score_cube)) |> dplyr::list_rbind()
+
+
 
 
 ##############################
@@ -292,7 +348,7 @@ get_aggregate_profile <- function(year){
 
   func <- function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) get_profile(year,kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
 
-  abm_y <- abm_y %>% select(kWh,tariff_plan, phi, gamma, eta, tau, natural_profile)
+  abm_y <- abm_y %>% select(j,kWh,tariff_plan, phi, gamma, eta, tau, natural_profile)
   #aggregate by tariff_plan
 
   res <- tibble()
@@ -316,7 +372,169 @@ get_aggregate_profile <- function(year){
 
 get_aggregate_profile(2040)
 
+###########
+# kernels
+#############
+tau <- 96
+shape <- 2.5
+scale <- tau/gamma(1+1/shape)
+matern <- function(hour,tau){
+  #Matern 5/2 Kernel
+  #just one tuning parameter
+  p <- sqrt(5) * abs(hour) / tau
+  # Smooth flat top, exponential tail, 100% PSD
+  (1 + p + (p^2) / 3) * exp(-p)
+}
+mixture <- function(hour,tau_short,tau_long,a_s){
+
+  a_s*exp(-(hour/tau_short)^2) + (1-a_s)*exp(-(hour/tau_long)^2)
+
+}
+
+tau <- 48
+kern <- tibble(hour=seq(-5*tau,5*tau)) %>% mutate(exp=exp(-abs(hour)/tau),gauss=exp(-0.5*(hour/tau)^2))
+kern <- kern %>% mutate(matern=matern(hour,tau),cauchy=1/(1+(hour/tau)^2))
+kern <- kern %>% pivot_longer(-hour)
+
+kern %>% ggplot()+geom_line(aes(hour,value,colour=name))
 
 
+integrate(function(t) 1/(1+(t/(0.6366*48))^2),lower = 0, upper=Inf)
 
+
+#########################
+# flexibility forces
+##########################
+
+N <- 500
+tau <- 24
+sep <- 100
+l <- rep(1,N)
+lp <- l
+lp[200-sep/2] <- 1.25
+lp[200+sep/2] <- 0.75
+df <- tibble(t=1:N,l=l,lp=lp)
+g_kernel <- function(k,t){
+  matern(k-t,tau)
+}
+cost <- function(t){
+
+  sum((lp-1)*sapply(1:N, function(k) g_kernel(k,t)))^2
+
+}
+
+total_cost <- function(sep,tau){
+
+  N <- 500
+  l <- rep(1,N)
+  lp <- l
+  lp[200-sep/2] <- 1.25
+  lp[200+sep/2] <- 0.75
+  df <- tibble(t=1:N,l=l,lp=lp)
+  g_kernel <- function(k,t){
+    matern(k-t,tau)
+  }
+  cost <- function(t){
+
+    sum((lp-1)*sapply(1:N, function(k) g_kernel(k,t)))^2
+
+  }
+
+  total_cost <- sum(sapply(1:N,cost))
+  return(total_cost)
+}
+
+df <- expand_grid(sep=seq(1,60),tau=seq(3,60,by=3)) %>% rowwise() %>% mutate(c=total_cost(sep,tau))
+
+df %>% filter(tau %in% c(12)) %>% ggplot(aes(sep,c,colour=factor(tau)))+geom_line()
+
+
+df <- df %>% mutate(k2=matern(t-100,24))
+df <- df %>% rowwise() %>% mutate(cost=cost(t))
+g1 <- df %>% ggplot()+geom_line(aes(t,lp)) +geom_line(aes(t,lp),colour="red")
+g2 <- df %>% ggplot()+ geom_line(aes(t,k2),colour="grey50")
+g1/g2
+
+df$cost %>% sum()
+df %>% ggplot(aes(t,cost))+geom_line()
+
+tariff_plan <- "flat"
+
+get_full_annual_cost <- function (yeartime = 2030, kWh = 8760, tariff_plan, phi = 0.5,
+          gamma = 10, eta = 1, tau = 24, kernel = "exp", natural_profile = "LP1",
+          prices_scen)
+{
+  stopifnot(tariff_plan %in% c("flat", "tou", "tou_old", "dynamic"))
+  profile <- tolower(natural_profile)
+  load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,
+                                                                    any_of(profile))
+  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,
+                                                     by = c("datetime", profile)) %>% dplyr::filter(tariff_plan ==
+                                                                                                      .env$tariff_plan)
+  start_time <- lubridate::date_decimal(yeartime)
+  end_time <- lubridate::date_decimal(yeartime + 1)
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
+                                        datetime <= end_time)
+  df$load <- df[[profile]] * kWh
+  df <- df %>% dplyr::select(datetime, load, price) %>% dplyr::arrange(datetime)
+  W <- ceiling(5 * tau)
+  lags <- 0:W
+  plags <- sqrt(5) * lags/(0.8385 * tau)
+  kernel_values <- if (kernel == "matern") {
+    (1 + plags + (plags^2)/3) * exp(-plags)
+  }
+  else if (kernel == "cauchy") {
+    1/(1 + (lags/(0.6366 * tau))^2)
+  }
+  else if (kernel == "exp") {
+    exp(-(lags/tau))
+  }
+  else {
+    exp(-(lags/(1.128 * tau))^2)
+  }
+  frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
+  p_ref <- median(df$price)
+  L_ref <- mean(df$load) * (1 - phi)
+  parameter_scaling <- p_ref/L_ref
+  gamma_scaled <- gamma * parameter_scaling/frob_sq
+  eta_scaled <- eta * parameter_scaling
+  compute_behavioural_cost <- function(x, tau) {
+    N <- length(x)
+    r <- exp(-1/tau)
+    a <- numeric(N)
+    a[1] <- x[1]
+    for (t in 2:N) {
+      a[t] <- x[t] + r * a[t - 1]
+    }
+    b <- numeric(N)
+    b[N] <- 0
+    if (N > 1) {
+      for (t in (N - 1):1) {
+        b[t] <- r * (b[t + 1] + x[t + 1])
+      }
+    }
+    y <- a + b
+    return(sum(y^2))
+  }
+  if (tariff_plan != "flat") {
+    df <- get_flex(df, phi, gamma, eta, tau, kernel)
+    bill_inflex <- sum(df$price * df$load)
+    bill_flex <- sum(df$price * df$load_opt)
+    ramping_cost <- eta_scaled * sum(diff(df$x)^2)
+    behavioural_cost <- gamma_scaled * compute_behavioural_cost(df$x,
+                                                                tau)
+  }
+  else {
+    bill_inflex <- sum(df$price * df$load)
+    bill_flex <- bill_inflex
+    ramping_cost <- 0
+    behavioural_cost <- 0
+  }
+  return(data.frame(tariff_plan = tariff_plan, kWh = kWh, phi = phi,
+                    gamma = gamma, eta = eta, tau = tau, annual_bill_inflexible = bill_inflex,
+                    annual_bill_flexible = bill_flex, fin_gain = round(bill_flex -
+                                                                         bill_inflex), penalty = behavioural_cost, kinetic = ramping_cost,
+                    real_gain = round(bill_flex + behavioural_cost + ramping_cost -
+                                        bill_inflex)))
+}
 

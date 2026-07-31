@@ -15,10 +15,10 @@ match_flex_params(x, score_cube)
 single row dataframe
 }
 \description{
-This function returns a flexibility \eqn{gamma,tau,phi} parameter triple give a value for the MAD load-shifting
-quantity x. Inflexible agents have zero loadshift MAD while highly flexible agents have loadshifting MAD of about 30%.\cr
+This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the MAE 3-hourly load-shifting
+quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
 \cr
-The utility function flex_score_matrix() must be called before using this function (see examples). This recasts the data in
+The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
 flex_scores.\cr
 For ToU parameter inference tau is set at
 }

@@ -4,7 +4,15 @@
 \alias{get_flex}
 \title{get_flex}
 \usage{
-get_flex(demand, phi = 0.5, gamma = 0.5, eta = 1, tau = 24, precision = 0.001)
+get_flex(
+  demand,
+  phi = 0.5,
+  gamma = 0.5,
+  eta = 1,
+  tau = 24,
+  kernel = "exp",
+  precision = 1e-04
+)
 }
 \arguments{
 \item{demand}{a 3 column dataframe of datetime, hourly prices and natural_load}
@@ -17,25 +25,37 @@ get_flex(demand, phi = 0.5, gamma = 0.5, eta = 1, tau = 24, precision = 0.001)
 
 \item{tau}{flexibility time horizon in hours}
 
+\item{kernel}{choice of "matern", "exponential", "cauchy","gauss" (both have single lifetime tau)}
+
 \item{precision}{desired solver precision}
 }
 \value{
 a 2-column dataframe of datetime and perturbed load
 }
 \description{
-get_flex solves for the flexible load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
+get_flex solves for the flexible hourly household load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
 the direct billing cost as well as penalties associated with load-shifting behaviour. get_flex() assumes that total consumption over the period 1:T is unchanged irrespective
 of prices \eqn{p(t)} \cr
 \cr
-The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price. Load-shifting behaviour may arise in response to varying prices \eqn{p_t}.
-The billing cost depends on the prices \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
-\deqn{C = \sum_{t=1}^T p_t L_t + \eta \sum_t (L_{t+1}-L_t)^2 + \gamma_\tau \sum_t \sum_k \exp(-|k|/\tau) \left(L_{t+k}-L_{t+k}^0\right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
-An additional constraint \eqn{\sum(L_t)=\sum(L_t^0)} is imposed i.e. total household energy consumption is inelastic.
+The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price profile of the household. Load-shifting arises in response to time-varying prices \eqn{p_t}.
+The billing cost is is linear \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
+\deqn{\delta C = \sum_{t=1}^T p_t x_t + \eta \sum_t (x_{t+1}-x_t)^2 + \gamma \sum_t \left( \sum_k g(k-t) x_k \right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
+\cr
+The second term is "ramping" cost penalty that limits unrealistic rapid \eqn{x_t} variations in response to minor price variations. The third term is teh square of
+a convolution of \eqn{x_t} withe a kernel \eqn{g_t} that decays on some timescale \eqn{\tau}. This decay timescale represents the willingness of the
+household to defer or advance loads in response to anticipated price changes.A simple choice is \eqn{g(t)= \sqrt{\frac{2}{\tau}} \exp(-t/\tau)}
+}
+\details{
 \cr
 The \eqn{\eta} term prevents excessive load-shifting in response to small differences in prices (regularisation). The \eqn{\gamma_\tau} term is permits
 is a stiffness term that limits load-shifting over a timescale \eqn{\tau} but inhibits it on longer timescales.\cr
 \cr
-The cost parameters  are defined for a standard annual load of 8760kWh. The scales inversely with the mean load and
+The cost parameters  are defined for a standard annual load of 8760kWh.\cr
+\cr
+get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
+
+Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
+\eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.
 }
 \examples{
 
@@ -44,6 +64,6 @@ demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
 demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
 demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
 demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0.5,gamma=1,eta=1,tau=48)
-100*mad((test$load_opt/test$load-1))
+test <- get_flex(demand,phi=0,gamma=1,eta=0.5,tau=96,kernel="exp")
+100*sum(abs(test$load_opt-test$load))/8760
 }

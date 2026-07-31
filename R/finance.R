@@ -13,19 +13,29 @@
 
 #' get_flex
 #'
-#' get_flex solves for the flexible load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
+#' get_flex solves for the flexible hourly household load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
 #' the direct billing cost as well as penalties associated with load-shifting behaviour. get_flex() assumes that total consumption over the period 1:T is unchanged irrespective
 #' of prices \eqn{p(t)} \cr
 #' \cr
-#' The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price. Load-shifting behaviour may arise in response to varying prices \eqn{p_t}.
-#' The billing cost depends on the prices \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
-#' \deqn{C = \sum_{t=1}^T p_t L_t + \eta \sum_t (L_{t+1}-L_t)^2 + \gamma_\tau \sum_t \sum_k \exp(-|k|/\tau) \left(L_{t+k}-L_{t+k}^0\right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
-#' An additional constraint \eqn{\sum(L_t)=\sum(L_t^0)} is imposed i.e. total household energy consumption is inelastic.
+#' The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price profile of the household. Load-shifting arises in response to time-varying prices \eqn{p_t}.
+#' The billing cost is is linear \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
+#' \deqn{\delta C = \sum_{t=1}^T p_t x_t + \eta \sum_t (x_{t+1}-x_t)^2 + \gamma \sum_t \left( \sum_k g(k-t) x_k \right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
+#' \cr
+#' The second term is "ramping" cost penalty that limits unrealistic rapid \eqn{x_t} variations in response to minor price variations. The third term is teh square of
+#' a convolution of \eqn{x_t} withe a kernel \eqn{g_t} that decays on some timescale \eqn{\tau}. This decay timescale represents the willingness of the
+#' household to defer or advance loads in response to anticipated price changes.A simple choice is \eqn{g(t)= \sqrt{\frac{2}{\tau}} \exp(-t/\tau)}
+#'
 #' \cr
 #' The \eqn{\eta} term prevents excessive load-shifting in response to small differences in prices (regularisation). The \eqn{\gamma_\tau} term is permits
 #' is a stiffness term that limits load-shifting over a timescale \eqn{\tau} but inhibits it on longer timescales.\cr
 #' \cr
-#' The cost parameters  are defined for a standard annual load of 8760kWh. The scales inversely with the mean load and
+#' The cost parameters  are defined for a standard annual load of 8760kWh.\cr
+#' \cr
+#' get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
+#'
+#' Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
+#' \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.
+#'
 #'
 #'
 #' @param demand a 3 column dataframe of datetime, hourly prices and natural_load
@@ -33,7 +43,9 @@
 #' @param gamma unscaled quandatric cost penalty weight
 #' @param eta unscaled weight of the kinetic term (regularisation)
 #' @param tau flexibility time horizon in hours
+#' @param kernel choice of "matern", "exponential", "cauchy","gauss" (both have single lifetime tau)
 #' @param precision desired solver precision
+#'
 #'
 #' @returns a 2-column dataframe of datetime and perturbed load
 #' @export
@@ -45,51 +57,86 @@
 #' demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 #' demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
 #' demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
-#' test <- get_flex(demand,phi=0.5,gamma=1,eta=1,tau=48)
-#' 100*mad((test$load_opt/test$load-1))
-get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,precision=1e-3) {
+#' test <- get_flex(demand,phi=0,gamma=1,eta=0.5,tau=96,kernel="exp")
+#' 100*sum(abs(test$load_opt-test$load))/8760
+get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="exp",precision=1e-4) {
   # T = Total horizon in hours
   #if(dim(prices)[1] != dim(loads)[1]) stop("dimensions of prices and natural loads do not agree ")
   #print()
   #maximum import capacity
+  stopifnot(kernel %in% c("exp","gauss","cauchy","matern"))
+
   P_max <- sD %>% dplyr::filter(parameter=="mic") %>% dplyr::pull(value)
   demand <- demand %>% dplyr::arrange(datetime)
   T_total <- nrow(demand)
-  fload <- (1-phi)*demand$load
+  fload <- (1-phi)*demand$load #the part of the load that is flexible and modelled
   #print(paste("mean load =", mean(fload)))
   price <- demand$price
   if(length(price) != length(fload)) stop("load and price data mismatch")
   # 1. Bandwidth for the Exponential Kernel
-  W <- ceiling(5 * tau)
+  W <- ceiling(5 * tau) #might not be great for cauchy kernel
   lags <- 0:W
-  kernel_values <- exp(-lags / tau)
-  #frobenius scaling
+  plags <- sqrt(5) * lags / (0.8385*tau) #used to ensure matern integrates to tau
+  #scale_parameter <- tau/gamma(1+1/shape_parameter)
+  #kernel_values <- exp(-(lags / scale_parameter)^shape_parameter)
+  kernel_values <- if(kernel=="matern") {
+    (1 + plags + (plags^2) / 3) * exp(-plags)
+  } else if(kernel=="cauchy") {
+    1/(1+(lags/(0.6366*tau))^2)
+  } else if(kernel=="exp"){
+      exp(-(lags /tau))
+  } else {
+    exp(-(lags/(1.128*tau))^2)
+  }
+  #frobenius scaling L2
   frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
-  frob_norm <- sqrt(frob_sq)
-  # scaled gamma
-  gamma_scaled <- gamma / frob_norm
+  # scale by price and load so that gamma and eta are dimensionaless
+  p_ref <- median(demand$price)
+  L_ref <- mean(fload)
 
-  # quadratic matrix P
-  # exponential kernel
-  P_kern <- Matrix::bandSparse(T_total, k = lags,
-                       diag = lapply(kernel_values, function(v) rep(v, T_total)),
-                       symmetric = TRUE)
+  # 2. Convert Dimensionless (gamma, eta) to Dimensionful Parameters
+  # Units of dim_scale are [Currency / kW^2]
+  parameter_scaling <- p_ref / L_ref
+
+  eta_scaled <- eta * parameter_scaling
+  gamma_scaled <- gamma / frob_sq * parameter_scaling
+  #print(paste("gamma normalisation",frob_sq))
+  # L1 Scaling (integrates to 1)
+  #kernel_sum <- sum(kernel_values) + sum(kernel_values[-1])
+  #gamma_scaled <- gamma / (kernel_sum)^2
+
+  #gamma_scaled <- gamma/tau
+  # kernel matrix P_kern
+  K <- Matrix::bandSparse(
+    T_total,
+    k = lags,
+    diag = lapply(kernel_values, function(v) rep(v, T_total)),
+    symmetric = TRUE
+  )
+  # Square it for the roughness penalty: K^T %*% K
+  P_kern <- Matrix::crossprod(K)
 
   # kinetic term (penalise ramping)
   # eta * sum((L_t+1 - L_t)^2)
-  D <- Matrix::sparseMatrix(i = rep(1:(T_total-1), each = 2),
-                    j = as.vector(rbind(1:(T_total-1), 2:T_total)),
-                    x = rep(c(-1, 1), T_total-1))
-  P_kin <- Matrix::t(D) %*% D
-
+  D <- Matrix::sparseMatrix(
+    i = rep(1:(T_total-1), each = 2),
+    j = as.vector(rbind(1:(T_total-1), 2:T_total)),
+    x = rep(c(-1, 1), T_total-1),
+    dims = c(T_total-1, T_total) # Explicit dimensions for safety
+  )
+  # Ramping penalty matrix: D^T %*% D
+  P_kin <- Matrix::crossprod(D)
   # Combined P matrix
-  P <- (gamma_scaled * P_kern) + (eta * P_kin)
+  P <- (gamma_scaled * P_kern) + (eta_scaled * P_kin)
   #symmetrise
   P <- 0.5 * (P + Matrix::t(P))
-  #linear term (q)
-  q <- price
+  #linear term in x*L^0 ??
+  #q_kin <- as.vector(2 * eta * (P_kin %*% fload))
+  q_kin <- 0
+  # Total q vector: price + natural load ramping penalty
+  q <- price + q_kin
 
-  # 4. Constraints (A*x)
+  # the constraints (A*x)
   # We stack: 1. Sum(x) = 0  (Equality)
   #           2. x_t         (Identity for box constraints)
 
@@ -101,7 +148,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,precision=
   # Equality constraint: l=0, u=0
   # Capacity constraint: -L0 <= x <= P_max - L0
   l <- c(0, -fload)
-  u <- c(0, P_max - fload)
+  u <- c(0, P_max - demand$load)
 
   # 5. Solve using OSQP
   settings <- osqp::osqpSettings(eps_abs = precision, eps_rel = precision, verbose = TRUE,max_iter = 10000)
@@ -173,10 +220,11 @@ get_price_load_scen <- function(scen,start_year=2019,end_year=2040){
 #'
 #' prices_scen <- set_prices(sD)
 #' get_annual_cost(2026,8760,"tou",0.5,1,1,48,"LP1",prices_scen)
-#' get_annual_cost(2026,8760,"dynamic",0.5,1,1,48,"LP3",prices_scen)
-get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24, natural_profile="LP1", prices_scen) {
+#' get_annual_cost(2030,8760,"dynamic",0.25,1,0.2,96,"LP3",prices_scen) #
+#' get_annual_cost_simple(2030,8760,"dynamic","LP3",prices_scen) #
+get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24,natural_profile="LP1", prices_scen) {
   #
-  stopifnot(tariff_plan %in% c("flat","tou","toy_old","dynamic"))
+  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   profile <- tolower(natural_profile)
   load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
   #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
@@ -224,7 +272,7 @@ get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta
 #' get_annual_cost_simple
 #'
 #' evaluates the annual electricity cost of tariff scheme at yeartime for an agent based on standard profiles i.e. no flexibility modelling. This function
-#' is used by initialise_agents()
+#' is used by initialise_agents() and is also useful
 #' \cr
 #' At present the tariff scheme are flat, day/night/peak and dynamic and the characteristic load profile is LP1 or LP3. Future price assumptions
 #' are typically the output of get_tariff_prices(scenario)
@@ -242,7 +290,10 @@ get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta
 #'
 #' prices_scen <- set_prices(sD)
 #' get_annual_cost_simple(2019,4000,"tou_old","LP2",prices_scen=prices_scen)
-#'
+#' get_annual_cost_simple(2030,8760,"tou_old","LP2",prices_scen=prices_scen)
+#' get_annual_cost_simple(2030,8760,"tou","LP1",prices_scen=prices_scen)
+#' get_annual_cost_simple(2030,8760,"flat","LP1",prices_scen=prices_scen)
+#' get_annual_cost_simple(2030,8760,"dynamic","LP1",prices_scen=prices_scen)
 get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", prices_scen) {
 
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
@@ -321,7 +372,7 @@ set_prices <- function(scen,cru_cap=TRUE){
   #dynamic prices
   dyn_prices <- prices %>% dplyr::select(datetime,tariff,price) %>% dplyr::mutate(tariff_plan="dynamic")
   #################################
-  # a somewhat speculative guess about how network suppliers arrive at their flat tariff
+  # a somewhat speculative guess about how network suppliers arrive at their flat tariff (commodity swap price)
   # mean flat prices paid by year
   #################################
   flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price),dynamic_lp2=sum(lp2*price),
@@ -355,7 +406,7 @@ set_prices <- function(scen,cru_cap=TRUE){
 
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tariff","datetime"))
   #apply VAT to all prices
-  result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tariff))
+  result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tariff),by="datetime")
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price)
 }
 

@@ -48,5 +48,6 @@ are typically the output of get_tariff_prices(scenario)
 
 prices_scen <- set_prices(sD)
 get_annual_cost(2026,8760,"tou",0.5,1,1,48,"LP1",prices_scen)
-get_annual_cost(2026,8760,"dynamic",0.5,1,1,48,"LP3",prices_scen)
+get_annual_cost(2030,8760,"dynamic",0.25,1,0.2,96,"LP3",prices_scen) #
+get_annual_cost_simple(2030,8760,"dynamic","LP3",prices_scen) #
 }

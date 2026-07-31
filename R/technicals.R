@@ -587,28 +587,28 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #' flex_score_cube
 #'
 #' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
-#'
+#' It is based on the 3-hour flexibility score.
 #' @param eta eta parameter assumption
 #' @returns
 #' @export
 #'
 #' @examples
 #' flex_score_cube()
-flex_score_cube <- function(eta=0.2){
+flex_score_cube <- function(eta=1){
 
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
-    flex_hour ~ s(phi, gamma,tau, k = 15),
+    flex_3hr ~ s(phi, tau, k = 15),
     family = gaussian(link = "log"), # Forces non-negative predictions
-    data = flex_scores %>% dplyr::filter(tariff_plan=="tou",eta==.$eta) %>% dplyr::select(phi,gamma,tau,flex_hour)
+    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta) %>% dplyr::select(phi,gamma,eta,tau,flex_3hr)
   )
   # fine-graining
-  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 80)
-  gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 80)
-  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 50)
+  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 100)
+  #gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 80)
+  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 100)
 
   # Expand into a dense 2D grid matrix (40,000 points)
-  dense_grid <- tidyr::expand_grid(phi = phi_grid, gamma = gamma_grid,tau=tau_grid)
+  dense_grid <- tidyr::expand_grid(phi = phi_grid,tau=tau_grid)
   # Predict the continuous flex_scores across the entire surface
   dense_grid$flex_score <- predict(surface_model, newdata = dense_grid, type = "response")
   dense_grid %>% return()
@@ -617,10 +617,10 @@ flex_score_cube <- function(eta=0.2){
 
 #' match_flex_params
 #'
-#' This function returns a flexibility \eqn{gamma,tau,phi} parameter triple give a value for the MAD load-shifting
-#' quantity x. Inflexible agents have zero loadshift MAD while highly flexible agents have loadshifting MAD of about 30%.\cr
+#' This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the MAE 3-hourly load-shifting
+#' quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
 #' \cr
-#' The utility function flex_score_matrix() must be called before using this function (see examples). This recasts the data in
+#' The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
 #' flex_scores.\cr
 #' For ToU parameter inference tau is set at
 #'
@@ -639,7 +639,11 @@ match_flex_params <- function(x,score_cube){
   #
   tol <- 0.1
   #coordinates of the contour line at height x
-  matching_triples <- score_cube %>% dplyr::filter(abs(flex_score - x) <= tol) %>% dplyr::select(phi, gamma,tau)
+  xmax <- max(score_cube$flex_score)
+  xmin <- min(score_cube$flex_score)
+  x <- max(xmin,x)
+  x <- min(x,xmax)
+  matching_triples <- score_cube %>% dplyr::filter(abs(flex_score - x) <= tol) %>% dplyr::select(phi,tau)
   matching_triples %>% dplyr::slice_sample()
 
 }
@@ -681,3 +685,239 @@ sem_trend_price <- function(scen,yeartime){
   res <- approx(x=c(2026,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y
   return(res)
 }
+
+
+#' get_profile
+#'
+#' returns the flexible profile from 1-Jan to 31 Dec of year in a given price scenario.\cr
+#' \cr
+#' This function is used in get_aggregate_profile()
+#'
+#' @param year integer year
+#' @param kWh annual usage
+#' @param tariff_plan tariff plan
+#' @param phi inflexible fraction
+#' @param gamma cost penality
+#' @param eta ramping penalty
+#' @param tau loadshift horizon
+#' @param natural_profile natural profile
+#' @param prices_scen price scenario
+#'
+#' @returns data frame
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' get_profile(2030,3000,"dynamic",0.25,1,0.2,48,"LP1",prices_scen)
+#'
+get_profile <- function(year, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24, natural_profile="LP1",prices_scen) {
+  #
+  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
+  profile <- tolower(natural_profile)
+  load <- load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
+  #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
+  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
+  # 1. Fast date boundary calculation
+  start_time <- lubridate::date_decimal(year)
+  end_time   <- lubridate::date_decimal(year + 1)
+
+  # 2. Extract matching records
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
+                                        datetime <= end_time)
+
+  # 3. Vectorized baseline load adjustment
+  df$load <- df[[profile]] * kWh
+  df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
+
+  #Scale parameter by the flexible load
+  gamma_scaled <- gamma * (8760 / kWh)
+  eta_scaled   <- eta * (8760 / kWh)
+  if (tariff_plan != "flat"){
+    df <- get_flex(df, phi, gamma_scaled, eta_scaled, tau)
+    df <- df |> dplyr::select(datetime,price,load,load_opt) |> dplyr::rename("natural_load"=load,"optimised_load"=load_opt)}
+  else{
+
+    df$optimised_load <- df$load
+    df <- df %>% rename("natural_load"=load)
+  }
+  # 6. Return the final dataframe cleanly (No pipes on the return statement!)
+  return(df)
+}
+
+
+#' get_aggregate_profile
+#'
+#' @param year integer year
+#' @param abm abm output dataframe
+#' @param prices_scen  price scenario
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+get_aggregate_profile <- function(year,abm,prices_scen){
+
+  abm_y <- abm %>% filter(date==ymd(paste(year,"01","01",sep="-")))
+
+  func <- function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) get_profile(year,kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
+
+  abm_y <- abm_y %>% select(j,kWh,tariff_plan, phi, gamma, eta, tau, natural_profile)
+  #aggregate by tariff_plan
+
+  res <- tibble()
+  for(tariff_plan1 in c("flat","tou","dynamic"))
+  {
+    abm_s <- abm_y %>% filter(tariff_plan==tariff_plan1)
+    res1 <- pmap(abm_s, func) |> list_rbind() |> group_by(datetime) |> summarise(natural_load=sum(natural_load),optimised_load = sum(optimised_load, na.rm = TRUE), .groups = "drop")
+    res1$tariff_plan <- tariff_plan1
+    res <- res %>% bind_rows(res1)
+  }
+
+  res <- abm_s |> dplyr::mutate(data = pmap(pick(-j), func)) |> tidyr::unnest(cols = data) |> summarise(
+    natural_load   = sum(natural_load),
+    optimised_load = sum(optimised_load, na.rm = TRUE),
+    .by = c(j, tariff_plan,datetime) # Group by j (and datetime if needed)
+  )
+
+  return(res)
+
+}
+
+
+#' get_full_annual_cost
+#'
+#' This functional calculates the projected annual electricity cost at yeartime. The behavioural costs are included.
+#'
+#' @param yeartime start of annual evaluation period
+#' @param kWh annual kWh
+#' @param tariff_plan tariff plan
+#' @param phi inflexible fraction
+#' @param gamma dimensionless cost penality
+#' @param eta dimensionless ramping penalty
+#' @param tau energy recorovery horizon
+#' @param kernel chocie of kerel, default "exp"
+#' @param natural_profile L{1 or LP3 at the moment}
+#' @param prices_scen price scenario
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' get_full_annual_cost(2030,8760,"flat",0.2,10,0.1,24,"exp","LP1",prices_scen)
+#' get_full_annual_cost(2030,8760,"tou",0.2,10,0.1,24,"exp","LP1",prices_scen)
+#' get_full_annual_cost(2030,8760,"dynamic",0.2,10,0.1,24,"exp","LP1",prices_scen)
+#'
+get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, gamma=10, eta=1, tau=24,kernel="exp",natural_profile="LP1", prices_scen) {
+  #
+  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
+  profile <- tolower(natural_profile)
+  load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
+  #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
+  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
+  # 1. Fast date boundary calculation
+  start_time <- lubridate::date_decimal(yeartime)
+  end_time   <- lubridate::date_decimal(yeartime + 1)
+
+  # 2. Extract matching records
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
+                                        datetime <= end_time)
+
+  # 3. Vectorized baseline load adjustment
+  df$load <- df[[profile]] * kWh
+  df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
+
+
+  W <- ceiling(5 * tau) #might not be great for cauchy kernel
+  lags <- 0:W
+  plags <- sqrt(5) * lags / (0.8385*tau) #used to ensure matern integrates to tau
+  #scale_parameter <- tau/gamma(1+1/shape_parameter)
+  #kernel_values <- exp(-(lags / scale_parameter)^shape_parameter)
+  kernel_values <- if(kernel=="matern") {
+    (1 + plags + (plags^2) / 3) * exp(-plags)
+  } else if(kernel=="cauchy") {
+    1/(1+(lags/(0.6366*tau))^2)
+  } else if(kernel=="exp"){
+    exp(-(lags /tau))
+  } else {
+    exp(-(lags/(1.128*tau))^2)
+  }
+  #frobenius scaling L2
+  frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
+
+  #Scale parameter by the flexible load to get correct dimenions
+  p_ref <- median(df$price)
+  L_ref <- mean(df$load)*(1-phi)
+
+  # 2. Convert Dimensionless (gamma, eta) to Dimensionful Parameters
+  # Units of dim_scale are [Currency / kW^2]
+  parameter_scaling <- p_ref / L_ref
+  gamma_scaled <- gamma*parameter_scaling/frob_sq
+  eta_scaled   <- eta*parameter_scaling
+  #compute x K^T K x
+  compute_behavioural_cost <- function(x, tau) {
+    N <- length(x)
+    r <- exp(-1 / tau)
+
+    # Forward pass: sum_{k <= t} r^(t - k) * x_k
+    a <- numeric(N)
+    a[1] <- x[1]
+    for (t in 2:N) {
+      a[t] <- x[t] + r * a[t - 1]
+    }
+
+    # Backward pass: sum_{k > t} r^(k - t) * x_k
+    b <- numeric(N)
+    b[N] <- 0
+    if (N > 1) {
+      for (t in (N - 1):1) {
+        b[t] <- r * (b[t + 1] + x[t + 1])
+      }
+    }
+
+    # y = K %*% x
+    y <- a + b
+
+    # Return x^T K^T K x = sum(y^2)
+    return(sum(y^2))
+  }
+
+  # 5. Calculate flexible loads conditionally
+  if (tariff_plan != "flat") {
+    df <- get_flex(df, phi, gamma, eta, tau,kernel)
+    bill_inflex <- sum(df$price * df$load)
+    bill_flex   <- sum(df$price * df$load_opt)
+    ramping_cost <- eta_scaled * sum(diff(df$x)^2)
+    behavioural_cost <- gamma_scaled*compute_behavioural_cost(df$x,tau)
+  } else {
+    # For flat tariffs, inflexible and flexible loads are identical
+    bill_inflex <- sum(df$price * df$load)
+    bill_flex   <- bill_inflex
+    ramping_cost <- 0
+    behavioural_cost <- 0
+  }
+
+
+  # 6. Return the final dataframe cleanly (No pipes on the return statement!)
+  return(
+    data.frame(
+      tariff_plan            = tariff_plan,
+      kWh=kWh,
+      phi = phi,
+      gamma = gamma,
+      eta=eta,
+      tau=tau,
+      annual_bill_inflexible = bill_inflex,
+      annual_bill_flexible   = bill_flex,
+      fin_gain                   = round(bill_flex - bill_inflex),
+      penalty = behavioural_cost,
+      kinetic = ramping_cost,
+      real_gain =  round(bill_flex +behavioural_cost+ramping_cost- bill_inflex)
+
+    )
+  )
+}
+
+
+
+

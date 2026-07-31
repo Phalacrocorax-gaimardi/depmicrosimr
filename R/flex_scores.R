@@ -3,17 +3,21 @@
 #' Parameters correspond to a 8760kWh annual load and LP1 reference profile.\cr
 #' \cr
 #' Hourly, daily and weekly scores are provided.
-#' @format A data frame with 2970 rows and 9 variables:
+#' @format A data frame with 540 rows and 13 variables:
 #' \describe{
-#'   \item{\code{tariff_plan}}{character dynamic or ToU}
-#'   \item{\code{profile}}{character LP1}
-#'   \item{\code{phi}}{double inflexible fraction}
-#'   \item{\code{gamma}}{double cost penalty parameter}
-#'   \item{\code{eta}}{double kinetic penalty parameter}
-#'   \item{\code{tau}}{double load reversion timescale}
-#'   \item{\code{flex_hour}}{double hourly score}
-#'   \item{\code{flex_day}}{double daily score}
-#'   \item{\code{flex_week}}{double daily score}
+#'   \item{\code{tariff_plan}}{character COLUMN_DESCRIPTION}
+#'   \item{\code{profile}}{profile used}
+#'   \item{\code{phi}}{double flexible fraction}
+#'   \item{\code{gamma}}{double cost penality }
+#'   \item{\code{eta}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{tau}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_1hr}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_3hr}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_6hr}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_12hr}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_24hr}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_day}}{double COLUMN_DESCRIPTION}
+#'   \item{\code{flex_week}}{double COLUMN_DESCRIPTION}
 #'}
-#' @details The output of get_flex_scores(), see diagnostic.R.
+#' @details see get_flex_scores in inst/diagnostics.R
 "flex_scores"

@@ -28,7 +28,7 @@ a real number, euros
 }
 \description{
 evaluates the annual electricity cost of tariff scheme at yeartime for an agent based on standard profiles i.e. no flexibility modelling. This function
-is used by initialise_agents()
+is used by initialise_agents() and is also useful
 \cr
 At present the tariff scheme are flat, day/night/peak and dynamic and the characteristic load profile is LP1 or LP3. Future price assumptions
 are typically the output of get_tariff_prices(scenario)
@@ -37,5 +37,8 @@ are typically the output of get_tariff_prices(scenario)
 
 prices_scen <- set_prices(sD)
 get_annual_cost_simple(2019,4000,"tou_old","LP2",prices_scen=prices_scen)
-
+get_annual_cost_simple(2030,8760,"tou_old","LP2",prices_scen=prices_scen)
+get_annual_cost_simple(2030,8760,"tou","LP1",prices_scen=prices_scen)
+get_annual_cost_simple(2030,8760,"flat","LP1",prices_scen=prices_scen)
+get_annual_cost_simple(2030,8760,"dynamic","LP1",prices_scen=prices_scen)
 }
