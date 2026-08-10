@@ -357,7 +357,7 @@ decompose_logprices <- function(price_data){
 #' dcmp <- decompose_logprices(sem_prices_2019_2025)
 #' generate_logprice_hmm(dcmp,n_state=3)
 #'
-generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.02) {
+generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 
   # 1. Outlier caps (Winsorization)
   lower_bound <- quantile(dcmp$remainder, winsor, na.rm = TRUE)
@@ -586,7 +586,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 
 #' flex_score_cube
 #'
-#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
+#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \tau} couples.
 #' It is based on the 3-hour flexibility score.
 #' @param eta eta parameter assumption
 #' @returns
@@ -594,7 +594,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #'
 #' @examples
 #' flex_score_cube()
-flex_score_cube <- function(eta=1){
+flex_score_cube <- function(eta=0.2){
 
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
@@ -632,9 +632,10 @@ flex_score_cube <- function(eta=1){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube()
+#' score_cube <- flex_score_cube(0.2)
 #' match_flex_params(25.4,score_cube)
-#'
+#' replicate(100,match_flex_params(25.4,score_cube)$tau) %>% mean()
+#' replicate(100,match_flex_params(25.4,score_cube)$phi) %>% mean()
 match_flex_params <- function(x,score_cube){
   #
   tol <- 0.1
@@ -918,6 +919,60 @@ get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, 
   )
 }
 
+
+#' get_flex_scores
+#'
+#' returns annual flexibility scores for a household based on their demand profile and flexibility characteristics.\cr
+#' \cr
+#' flexibility is defined relative to the "natural" profile with flat tariff, a specified ToU or dynamic tariffs, corresponding to a
+#' wholesale price scenario (and network charges). An evaluation year is also specified.\cr
+#' \cr
+#' get_flex_scores is used to produce the input data cube cube *flex_scores* which relates the \eqn{\phi,\gamma,\eta,\tau} to
+#' the agents stated or subjective flexibility.
+#'
+#'
+#' @param scen scenario
+#' @param year evaluation year
+#' @param kWh annual demand
+#' @param tariff_plan evaluation tariff plan (tou or dynamic)
+#' @param phi inflexible fraction
+#' @param gamma cost penalty
+#' @param eta kinetic penality
+#' @param tau shift time horizon
+#' @param kernel choice of kernel, defaults to "exp"
+#' @param profile assumed natural load profile
+#' @param prices_scen price scenario by tariff plan
+#'
+#' @returns single row data frame
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' get_flex_scores(sD,2025,4000,"tou",0.2,10,0.2,48,"exp",profile="LP1",prices_scen)
+#' get_flex_scores(sD,2025,4000,"dynamic",0.2,10,0.2,48,"exp",profile="LP1",prices_scen)
+get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,profile="LP1",prices_scen){
+  #
+  demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==year)
+  demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,tolower(profile)))
+  demand <- demand %>% dplyr::mutate(load=kWh*lp1) %>% dplyr::select(-lp1)
+  demand <- demand %>% dplyr::filter(tariff_plan==.env$tariff_plan) %>% dplyr::select(datetime,price,load)
+  flex <- get_flex(demand,phi,gamma,eta,tau,kernel,precision = 1e-3)
+  flex_1hr <- 100*sum(abs((flex$load_opt-flex$load)))/(2*kWh) #Total variation distance factor of 2
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "3 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_3hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "6 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_6hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "12 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_12hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "24 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_24hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
+
+  #flex1 <- flex %>% dplyr::group_by(lubridate::yday(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  #flex_interday <- 100*sum(abs(flex1$load_opt-flex1$load))/(2*kWh)
+  flex1 <- flex %>% dplyr::group_by(lubridate::week(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex_interweek <- 100*sum(abs(flex1$load_opt-flex1$load))/(2*kWh)
+  tibble::tibble(tariff_plan=tariff_plan,profile=profile,phi=phi,gamma=gamma,eta=eta,tau=tau,flex_1hr=flex_1hr,flex_3hr=flex_3hr,flex_6hr=flex_6hr,flex_12hr=flex_12hr,flex_24hr=flex_24hr,flex_week=flex_interweek)
+}
 
 
 

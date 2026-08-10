@@ -4,7 +4,13 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(scen, start_year = 2019, prices_scen, social_network)
+initialise_agents(
+  scen,
+  start_year = 2019,
+  prices_scen,
+  social_network,
+  eta = 0.5
+)
 }
 \arguments{
 \item{scen}{scenario design dataframe e.g. sD}
@@ -14,6 +20,8 @@ initialise_agents(scen, start_year = 2019, prices_scen, social_network)
 \item{prices_scen}{tariff prices dataframe}
 
 \item{social_network}{social network}
+
+\item{eta}{eta flex parameter value}
 }
 \value{
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters

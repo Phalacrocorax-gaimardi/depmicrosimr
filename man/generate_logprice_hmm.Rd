@@ -4,7 +4,7 @@
 \alias{generate_logprice_hmm}
 \title{generate_logprice_hmm}
 \usage{
-generate_logprice_hmm(dcmp, n_states = 3, winsor = 0.02)
+generate_logprice_hmm(dcmp, n_states = 3, winsor = 0.01)
 }
 \arguments{
 \item{dcmp}{decomposed logprices from decompose_logprices()}

@@ -3,7 +3,35 @@ library(tidyverse)
 library(patchwork)
 library(ggthemes)
 
+################
+# prices
+#################
+
+sem <- dynamic_prices(sD,2040)
+sem %>% ggplot(aes(datetime,price,colour=regime))+geom_line()+theme_minimal()
+
 prices_scen <- set_prices(sD)
+
+
+
+prices_scen %>% filter(year(datetime)==2030,yday(datetime)==150) %>% ggplot(aes(datetime,price,colour=tariff_plan))+geom_line() + geom_point()
+#daily dynmaic price variations
+pp <- prices_scen %>% filter(tariff_plan != "flat") %>% pivot_wider(names_from=tariff_plan,values_from=price)
+pp <- pp %>% group_by(date=as.Date(datetime)) %>% summarise(tou=mean(tou),dynamic=mean(dynamic),mae=sqrt(sum((dynamic-tou)^2)))
+#weekly dynamic price variations
+pp <- prices_scen %>% filter(tariff_plan != "flat") %>% pivot_wider(names_from=tariff_plan,values_from=price)
+pp <- pp %>% group_by(year=year(datetime),week=week(datetime)) %>% summarise(tou_mean=mean(tou),dynamic_mean=mean(dynamic),mae=sqrt(sum((dynamic-tou)^2)))
+
+
+pp %>% ggplot()+geom_point(aes(year+week/52,dynamic_mean),colour="red")+geom_point(aes(year+week/52,tou_mean))
+
+pp <- prices_scen %>% filter(tariff_plan != "flat") %>% pivot_wider(names_from=tariff_plan,values_from=price)
+pp %>% filter(year(datetime)==2030) %>% group_by(as.Date(datetime)) %>% summarise(mae=sqrt(sum((dynamic-tou)^2))) %>% slice_max(mae)
+week("2030-12-06")
+
+####################
+# initial conditions
+####################
 
 social <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 agents_in <- initialise_agents(sD,2019,prices_scen,social)
@@ -35,38 +63,58 @@ g3 <- prices %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(dateti
 g3 <- g3 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,1))
 #export::graph2ppt(g1,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/heteroskedastic_prices.png")
 #
+
+
+###############################
+# flexible profiles
+############################
+
+tariff_plan0 <- "tou"
+eta <- 0.25
+
+pp <- prices_scen %>% filter(tariff_plan != "flat") %>% pivot_wider(names_from=tariff_plan,values_from=price)
+week_no <- pp %>% filter(year(datetime)==2030) %>% group_by(date=as.Date(datetime)) %>% summarise(mae=sqrt(sum((dynamic-tou)^2))) %>% slice_max(mae) %>% pull(date) %>% week()
+
+
+
 demand <- prices_scen
-demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2035)
+demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2030)
 demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
-demand <- demand %>% dplyr::filter(tariff_plan=="dynamic") %>% dplyr::select(datetime,price,load)
+demand <- demand %>% dplyr::filter(tariff_plan==tariff_plan0) %>% dplyr::select(datetime,price,load)
 
 
-week_no <- 32
-g3 <- prices_scen %>% filter(tariff_plan=="dynamic", year(datetime)==2035,week(datetime)==week_no) %>% ggplot(aes(datetime,price)) +geom_line(colour="grey60",linewidth=1.2)
+
+g3 <- prices_scen %>% filter(tariff_plan==tariff_plan0, year(datetime)==2020,week(datetime)==week_no) %>% ggplot(aes(datetime,price)) +geom_line(colour="grey60",linewidth=1.2)
 g3 <- g3 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,0.75))
 
-test <- get_flex(demand,phi=0,gamma=10,eta=2,tau=12,kernel="exp")
+test <- get_flex(demand,phi=0.25,gamma=10,eta=eta,tau=12,kernel="exp")
 g0 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
-g0 <- g0 + geom_line(aes(datetime,load_opt),colour="red",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
-g0 <- g0 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
+g0 <- g0 + geom_line(aes(datetime,load_opt),colour="#a7d2cb",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g0 <- g0 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,3.5))
 
-test <- get_flex(demand,phi=0,gamma=10,eta=2,tau=24,kernel="exp")
+test <- get_flex(demand,phi=0.25,gamma=10,eta=eta,tau=24,kernel="exp")
 g1 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
-g1 <- g1 + geom_line(aes(datetime,load_opt),colour="red",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
-g1 <- g1 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
+g1 <- g1 + geom_line(aes(datetime,load_opt),colour="#f2d388",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g1 <- g1 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,3.5))
 
-test <- get_flex(demand,phi=0.,gamma=10,eta=2,tau=36,kernel="exp")
+test <- get_flex(demand,phi=0.25,gamma=10,eta=eta,tau=36,kernel="exp")
 g2 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
-g2 <- g2 + geom_line(aes(datetime,load_opt),colour="blue",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g2 <- g2 + geom_line(aes(datetime,load_opt),colour="#c98474",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
 g2 <- g2 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(0,2.5))
 
-test <- get_flex(demand,phi=0.,gamma=10,eta=2,tau=48,kernel="exp")
+test <- get_flex(demand,phi=0.25,gamma=10,eta=eta,tau=48,kernel="exp")
 g4 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
-g4 <- g4 + geom_line(aes(datetime,load_opt),colour="blue",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
-g4 <- g4 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(-0.1,2.5))
+g4 <- g4 + geom_line(aes(datetime,load_opt),colour= "#874c62",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g4 <- g4 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(-0.1,3.5))
 
-g3/g0/g1/g2/g4
+test <- get_flex(demand,phi=0.25,gamma=10,eta=eta,tau=96,kernel="exp")
+g5 <- test %>% filter(week(datetime)==week_no) %>% ggplot()
+g5 <- g5 + geom_line(aes(datetime,load_opt),colour= "grey80",linewidth=1.2) +geom_line(aes(datetime,load),linetype="dotted")
+g5 <- g5 + theme_minimal() + scale_colour_canva() + scale_y_continuous(limits=c(-0.1,3.5))
+
+
+g3/g0/g1/g2/g4/g5
 #export::graph2ppt(g3/g1/g2,"~/Policy/CAMG/reports/Empower2/report_AMJ_2026/load_shifting.png")
 
 
@@ -141,10 +189,10 @@ g + theme_minimal() + scale_colour_tableau() + geom_point()
 
 #phi-tau dependence
 
-phi <- 0.5
+phi <- 0.1
 df <- tibble()
 for(tariff_plan in c("flat","tou","dynamic"))
-  for(eta %in% c(0.1,0.5,1,2))
+  for(eta in c(0.1,0.5,1,2))
  for(phi in seq(0,0.8,by=2))
   for(tau in seq(3,72,by=3)){
     df0 <- get_full_annual_cost(2030,8760,tariff_plan,0.2,10,eta,tau,"exp","LP1",prices_scen)
@@ -154,9 +202,19 @@ for(tariff_plan in c("flat","tou","dynamic"))
   }
 
 
-g <- df  %>% ggplot(aes(tau,annual_bill_flexible,colour=tariff_plan))+geom_line() #+ facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
-g + theme_minimal() + scale_colour_tableau() + geom_point() + facet_wrap(.~phi)
 
+g <- df  %>% filter(tariff_plan %in% c("dynamic","tou")) %>% ggplot(aes(tau,annual_bill_flexible,colour=factor(eta)))+geom_line() #+ facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
+g <- g + theme_minimal() + scale_colour_tableau() + geom_point() + facet_wrap(.~tariff_plan)
+g +geom_hline(yintercept = filter(df,tariff_plan=="flat")$annual_bill_inflexible %>% mean(),linetype="dotted")
+
+df <- df %>% mutate(full_cost=annual_bill_flexible+penalty+kinetic)
+df1 <- df %>% pivot_longer(c(annual_bill_inflexible,annual_bill_flexible,fin_gain,penalty,kinetic,real_gain,full_cost))
+
+
+df1 <- df1 %>% filter(!str_detect(name,"gain"),tariff_plan != "flat",name != "annual_bill_inflexible")
+g <- df1  %>% ggplot(aes(tau,value,colour=name,linetype=factor(eta)))+geom_line() #+ facet_wrap(.~tau) + scale_x_continuous(trans="sqrt")
+g <- g + theme_minimal() + scale_colour_tableau()  + facet_wrap(.~tariff_plan)
+g +geom_hline(yintercept = filter(df,tariff_plan=="flat")$annual_bill_inflexible %>% mean(),linetype="dotted")
 
 
 df %>% ggplot()+geom_line(aes(tau,annual_bill_flexible,colour=tariff)) #+ geom_line(aes(tau,annual_bill_flexible),colour="red") + scale_y_continuous(limits=c(2600,3600))
@@ -210,15 +268,15 @@ get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,p
   demand <- demand %>% dplyr::mutate(load=kWh*lp1) %>% dplyr::select(-lp1)
   demand <- demand %>% dplyr::filter(tariff_plan==.env$tariff_plan) %>% dplyr::select(datetime,price,load)
   flex <- get_flex(demand,phi,gamma,eta,tau,kernel,precision = 1e-3)
-  flex_1hr <- 100*sum(abs((flex$load_opt-flex$load)))/kWh
+  flex_1hr <- 100*sum(abs((flex$load_opt-flex$load)))/(2*kWh) #Total variation distance factor of 2
   flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "3 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
-  flex_3hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex_3hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
   flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "6 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
-  flex_6hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex_6hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
   flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "12 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
-  flex_12hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex_12hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
   flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "24 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
-  flex_24hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/kWh
+  flex_24hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
 
   flex1 <- flex %>% dplyr::group_by(lubridate::yday(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_interday <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
@@ -226,6 +284,10 @@ get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,p
   flex_interweek <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
   tibble::tibble(tariff_plan=tariff_plan,profile=profile,phi=phi,gamma=gamma,eta=eta,tau=tau,flex_1hr=flex_1hr,flex_3hr=flex_3hr,flex_6hr=flex_6hr,flex_12hr=flex_12hr,flex_24hr=flex_24hr,flex_day=flex_interday,flex_week=flex_interweek)
 }
+
+get_flex_scores(sD,2026,8760,"tou",0,1,1,24,"exp",profile="LP1",prices_scen)
+get_flex_scores(sD,2026,8760,"tou",0.5,1,0.1,24,"exp",profile="LP1",prices_scen)
+
 
 get_flex_scores(sD,2026,8760,"tou",0,1,1,48,"cauchy",profile="LP1",prices_scen)
 
@@ -236,8 +298,9 @@ get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_sc
 
 gamma <- 10
 flex_scores_new <- tibble()
-for(eta in c(0.1,0.5,1,2))
-for(tariff_plan in c("tou","dynamic"))
+flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+for(eta in 0.2)
+ for(tariff_plan in c("tou","dynamic"))
   for(phi in seq(0,0.8,by=0.2))
    # for(gamma in c(1,10,20,50))
       for(tau in c(6,12,18,24,30,36,48,60,72))
@@ -248,20 +311,22 @@ for(tariff_plan in c("tou","dynamic"))
 
 
 #make flex scores table
-eta <- 1
+
 flex_scores_new <- tibble()
 for(tariff_plan in c("tou","dynamic"))
  for(phi in seq(0,0.8,by=0.2))
   for(gamma in c(0,0.1,0.25,0.5,1,2,5,10,20))
     for(tau in c(24,48,72,96))
-      for(eta in c(0.1,0.2,0.5,1,2)){
+      #for(eta in c(0.1,0.2,0.5,1,2)){
+      for(eta in 0.2){
       print(paste("gamma=",gamma))
       flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"matern","LP1",prices_scen))
       }
 
 #write_csv(flex_scores_new,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
 
-flex_scores_new %>% filter(phi==0,tariff_plan=="tou") %>% ggplot(aes(gamma,flex_hour,colour=factor(eta)))+geom_line() + facet_wrap(.~tau)
+flex_scores_new %>% filter(phi==0.4,tariff_plan=="tou") %>% ggplot(aes(eta,flex_3hr,colour=factor(tau)))+geom_line()# + facet_wrap(.~tau)
+flex_scores_new %>% filter(phi==0,tariff_plan=="tou") %>% ggplot(aes(eta,flex_1hr,colour=factor(tau)))+geom_line()# + facet_wrap(.~tau)
 
 #tau dependence
 
@@ -538,3 +603,50 @@ get_full_annual_cost <- function (yeartime = 2030, kWh = 8760, tariff_plan, phi 
                                         bill_inflex)))
 }
 
+
+#################################
+# flexible profile check
+# Does ToU profile looks like LP2?
+#################################
+
+prices_scen <- set_prices(sD)
+social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+agents_init <- initialise_agents(sD,2019,prices_scen,social_network)
+
+demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==2019)
+demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
+demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
+demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
+test <- get_flex(demand,phi=0.5,gamma=10,eta=0.2,tau=48,kernel="exp")
+get_flex_scores(sD,2019,8760,"tou",0.5,10,0.2,48,"exp","LP1",prices_scen)
+
+get_profile(2025,4000,"tou",0.5,10,0.2,48,"LP1",prices_scen)
+
+
+get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen){
+
+  agents_init <- agents_init %>% mutate(date=ymd(paste(year,"01","01",sep="-")))
+
+  func <- function(kWh, phi, gamma, eta, tau, natural_profile) get_profile(year,kWh, tariff_plan, phi, gamma, eta, tau, natural_profile,prices_scen)
+
+  agents_init <- agents_init %>% filter(tariff_plan != "tou_old")
+  agents_init <- agents_init %>% select(kWh,phi, gamma, eta, tau, natural_profile)
+  #aggregate by tariff_plan
+
+
+  res <- pmap(agents_init, func) |> list_rbind() |> group_by(datetime) |> summarise(natural_load=sum(natural_load),optimised_load = sum(optimised_load, na.rm = TRUE), .groups = "drop")
+  res$tariff_plan <- "tou"
+
+
+  return(res)
+
+}
+
+
+g1 <- res %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
+g1 <- g1 + theme_minimal()
+
+g2 <- load_profiles %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
+g2 <- g2 + theme_minimal()
+#
+g1/g2
