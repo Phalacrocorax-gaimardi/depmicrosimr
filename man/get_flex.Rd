@@ -55,7 +55,9 @@ The cost parameters  are defined for a standard annual load of 8760kWh.\cr
 get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
 
 Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
-\eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.
+\eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr
+\cr
+The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor $f_t$.
 }
 \examples{
 
@@ -64,6 +66,6 @@ demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
 demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
 demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
 demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0,gamma=1,eta=0.5,tau=96,kernel="exp")
+test <- get_flex(demand,phi=0.5,gamma=10,eta=0.5,tau=48,kernel="exp")
 100*sum(abs(test$load_opt-test$load))/8760
 }

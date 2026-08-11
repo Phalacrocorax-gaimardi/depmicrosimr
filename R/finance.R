@@ -34,7 +34,9 @@
 #' get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
 #'
 #' Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
-#' \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.
+#' \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr
+#' \cr
+#' The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor $f_t$.
 #'
 #'
 #'
@@ -57,7 +59,7 @@
 #' demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 #' demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
 #' demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
-#' test <- get_flex(demand,phi=0,gamma=1,eta=0.5,tau=96,kernel="exp")
+#' test <- get_flex(demand,phi=0.5,gamma=10,eta=0.5,tau=48,kernel="exp")
 #' 100*sum(abs(test$load_opt-test$load))/8760
 get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="exp",precision=1e-4) {
   # T = Total horizon in hours
@@ -67,9 +69,12 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   stopifnot(kernel %in% c("exp","gauss","cauchy","matern"))
 
   P_max <- sD %>% dplyr::filter(parameter=="mic") %>% dplyr::pull(value)
-  demand <- demand %>% dplyr::arrange(datetime)
+  demand <- demand %>% dplyr::arrange(datetime) %>% dplyr::mutate(hour=lubridate::hour(datetime))
+  demand <- demand %>% dplyr::inner_join(tou_tariffs %>% dplyr::select(start,f_inflexibility) %>% dplyr::rename("hour"=start),by="hour")
   T_total <- nrow(demand)
-  fload <- (1-phi)*demand$load #the part of the load that is flexible and modelled
+  #define the flexible load, including time of day modulatio
+  demand <- demand %>% dplyr::mutate(phi_t=phi*f_inflexibility) %>% dplyr::mutate(fload=(1-phi_t)*load)
+  fload <- demand$fload #the part of the load that is flexible and modelled
   #print(paste("mean load =", mean(fload)))
   price <- demand$price
   if(length(price) != length(fload)) stop("load and price data mismatch")
@@ -113,7 +118,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
     diag = lapply(kernel_values, function(v) rep(v, T_total)),
     symmetric = TRUE
   )
-  # Square it for the roughness penalty: K^T %*% K
+  # temporal penalty: K^T %*% K
   P_kern <- Matrix::crossprod(K)
 
   # kinetic term (penalise ramping)
@@ -161,10 +166,10 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   demand$load_opt <- demand$load + x_opt
 
   # Split the resulting load into components
-  demand$baseload <- phi*demand$load
-  demand$flex_load <- (1 - phi) * demand$load
-  demand$flex_opt <- (1 - phi) * demand$load + x_opt
-
+  demand$baseload <- demand$phi_t*demand$load
+  #demand$flex_load <- (1 - phi) * demand$load
+  #demand$flex_opt <- demand$fload + x_opt
+  demand <- demand %>% dplyr::select(-hour,-f_inflexibility,-phi_t)
   return(demand)
 }
 
