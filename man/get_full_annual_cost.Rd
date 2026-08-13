@@ -34,7 +34,7 @@ get_full_annual_cost(
 
 \item{kernel}{chocie of kerel, default "exp"}
 
-\item{natural_profile}{LP1 or LP3 at the moment}
+\item{natural_profile}{L{1 or LP3 at the moment}}
 
 \item{prices_scen}{price scenario}
 }

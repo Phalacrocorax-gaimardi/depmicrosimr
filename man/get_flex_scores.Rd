@@ -21,40 +21,29 @@ get_flex_scores(
 \arguments{
 \item{scen}{scenario}
 
-\item{year}{evaluation year}
+\item{year}{year of evaluation}
 
-\item{kWh}{annual demand}
+\item{kWh}{annual consumption}
 
-\item{tariff_plan}{evaluation tariff plan (tou or dynamic)}
+\item{tariff_plan}{tariff plan}
 
-\item{phi}{inflexible fraction}
+\item{phi}{inflexibility parameter}
 
-\item{gamma}{cost penalty}
+\item{gamma}{cost parameter}
 
-\item{eta}{kinetic penality}
+\item{eta}{kinetic cost parameter}
 
-\item{tau}{shift time horizon}
+\item{tau}{load-shift time horizon}
 
-\item{kernel}{choice of kernel, defaults to "exp"}
+\item{kernel}{defaut to "exp"}
 
-\item{profile}{assumed natural load profile}
+\item{profile}{LP1 or LP3}
 
-\item{prices_scen}{price scenario by tariff plan}
-}
-\value{
-single row data frame
+\item{prices_scen}{price scenario}
 }
 \description{
-returns annual flexibility scores for a household based on their demand profile and flexibility characteristics.\cr
+Evaluates a mesure of how much load has been shifted (flexibility) in response a price scenario, tariff plan. Flexibility is defined as
+\deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year.\cr
 \cr
-flexibility is defined relative to the "natural" profile with flat tariff, a specified ToU or dynamic tariffs, corresponding to a
-wholesale price scenario (and network charges). An evaluation year is also specified.\cr
-\cr
-get_flex_scores is used to produce the input data cube cube *flex_scores* which relates the \eqn{\phi,\gamma,\eta,\tau} to
-the agents stated or subjective flexibility.
-}
-\examples{
-prices_scen <- set_prices(sD)
-get_flex_scores(sD,2025,4000,"tou",0.2,10,0.2,48,"exp",profile="LP1",prices_scen)
-get_flex_scores(sD,2025,4000,"dynamic",0.2,10,0.2,48,"exp",profile="LP1",prices_scen)
+The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
 }
