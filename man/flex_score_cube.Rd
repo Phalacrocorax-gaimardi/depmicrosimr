@@ -4,10 +4,12 @@
 \alias{flex_score_cube}
 \title{flex_score_cube}
 \usage{
-flex_score_cube(eta = 0.2)
+flex_score_cube(eta = 0.2, gamma = 40)
 }
 \arguments{
 \item{eta}{eta parameter assumption}
+
+\item{gamma}{gamma parameter assumption}
 }
 \description{
 utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \tau} couples.

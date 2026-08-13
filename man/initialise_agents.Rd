@@ -9,7 +9,8 @@ initialise_agents(
   start_year = 2019,
   prices_scen,
   social_network,
-  eta = 0.5
+  eta = 0.2,
+  gamma = 40
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ initialise_agents(
 \item{social_network}{social network}
 
 \item{eta}{eta flex parameter value}
+
+\item{gamma}{gamma parameter choice}
 }
 \value{
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters

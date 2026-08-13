@@ -73,7 +73,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   demand <- demand %>% dplyr::inner_join(tou_tariffs %>% dplyr::select(start,f_inflexibility) %>% dplyr::rename("hour"=start),by="hour")
   T_total <- nrow(demand)
   #define the flexible load, including time of day modulatio
-  demand <- demand %>% dplyr::mutate(phi_t=phi*f_inflexibility) %>% dplyr::mutate(fload=(1-phi_t)*load)
+  demand <- demand %>% dplyr::mutate(phi_t=pmin(1,phi*f_inflexibility)) %>% dplyr::mutate(fload=(1-phi_t)*load)
   fload <- demand$fload #the part of the load that is flexible and modelled
   #print(paste("mean load =", mean(fload)))
   price <- demand$price

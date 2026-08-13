@@ -295,11 +295,10 @@ get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_sc
 
 #test gamma-tau scaling
 
-
-gamma <- 10
+gamma <- 40
 flex_scores_new <- tibble()
-flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
-for(eta in 0.2)
+#flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+for(eta in seq(0,0.8,by=0.2))
  for(tariff_plan in c("tou","dynamic"))
   for(phi in seq(0,0.8,by=0.2))
    # for(gamma in c(1,10,20,50))
@@ -309,6 +308,10 @@ for(eta in 0.2)
           flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"exp","LP1",prices_scen))
         }
 
+flex_scores_new0 <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+flex_scores_new <- flex_scores_new0 %>% bind_rows(flex_scores_new)
+#
+write_csv()
 
 #make flex scores table
 
@@ -370,40 +373,6 @@ g1+g2
 ####################################
 
 abm <- read_rds("~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.0.RData")[[1]]
-
-get_profile <- function(year, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24, natural_profile="LP1") {
-  #
-  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
-  profile <- tolower(natural_profile)
-  load <- load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
-  #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
-  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
-  # 1. Fast date boundary calculation
-  start_time <- lubridate::date_decimal(year)
-  end_time   <- lubridate::date_decimal(year + 1)
-
-  # 2. Extract matching records
-  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
-                                        datetime <= end_time)
-
-  # 3. Vectorized baseline load adjustment
-  df$load <- df[[profile]] * kWh
-  df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
-
-  #Scale parameter by the flexible load
-  gamma_scaled <- gamma * (8760 / kWh)
-  eta_scaled   <- eta * (8760 / kWh)
-  if (tariff_plan != "flat"){
-  df <- get_flex(df, phi, gamma_scaled, eta_scaled, tau)
-  df <- df |> dplyr::select(datetime,price,load,load_opt) |> dplyr::rename("natural_load"=load,"optimised_load"=load_opt)}
-  else{
-
-    df$optimised_load <- df$load
-    df <- df %>% rename("natural_load"=load)
-  }
-  # 6. Return the final dataframe cleanly (No pipes on the return statement!)
-  return(df)
-}
 
 get_profile(2030,3000,"dynamic",0.25,1,0.2,48,"LP1")
 
@@ -603,25 +572,35 @@ get_full_annual_cost <- function (yeartime = 2030, kWh = 8760, tariff_plan, phi 
                                         bill_inflex)))
 }
 
-
-#################################
+# ==============================
+# ===============================
 # flexible profile check
 # Does ToU profile looks like LP2?
-#################################
+# =================================
+# ===================================
 
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-agents_init <- initialise_agents(sD,2019,prices_scen,social_network)
+agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.5,gamma=40)
 
-demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==2019)
+demand <- prices_scen
+demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2030)
 demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
 demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0.5,gamma=10,eta=0.2,tau=48,kernel="exp")
-get_flex_scores(sD,2019,8760,"tou",0.5,10,0.2,48,"exp","LP1",prices_scen)
 
-get_profile(2025,4000,"tou",0.5,10,0.2,48,"LP1",prices_scen)
+test <- get_flex(demand,0.5,30,0.5,24)
+test %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,load),linetype="dotted") + geom_line(aes(datetime,load_opt))
 
+test0 <- test %>% group_by(hour=hour(datetime)) %>% summarise(load=mean(load),load_opt=mean(load_opt), fload=mean(fload))
+test0  %>% ggplot() + geom_line(aes(hour,load),linetype="dotted") + geom_line(aes(hour,load_opt))
+
+
+test <- get_profile(2025,4000,"tou",0.8,10,0.1,48,"LP1",prices_scen)
+
+test %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load))
+
+tou_tariffs <- tou_tariffs %>% mutate(f_inflexibility=replace(f_inflexibility, start %in% c(7,8,8),4))
 
 get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen){
 
@@ -642,11 +621,28 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
 
 }
 
+res <- get_aggregate_test_profile(2025,agents_init[1:10,],"tou",prices_scen)
 
-g1 <- res %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
+g1 <- res %>% filter(week(datetime)==20) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
 g1 <- g1 + theme_minimal()
 
-g2 <- load_profiles %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
+g2 <- load_profiles %>% filter(week(datetime)==20) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
 g2 <- g2 + theme_minimal()
 #
-g1/g2
+#dev.new()
+g1/g2 + plot_annotation(title = "eta=0.5")
+
+
+obsv_shift <- load_profiles %>% group_by(hour=hour(datetime)) %>% summarise(obsv_diff=mean(lp1-lp2))
+model_shift <-  res  %>% group_by(hour=hour(datetime)) %>% summarise(model_diff=mean(natural_load-optimised_load))
+
+shift <- obsv_shift %>% inner_join(model_shift)
+
+coef <- lm(model_diff~obsv_diff,shift) %>% coefficients()
+shift <- shift %>% mutate(obsv_diff= coef[2]*obsv_diff)
+
+g <- shift %>% pivot_longer(-hour) %>% filter(name != "ratio") %>% ggplot(aes(hour,-value,colour=name))+geom_line(linewidth=2) + theme_minimal()
+g g + scale_colour_canva(palette="Playful greens and blues")
+
+
+shift %>% ggplot(aes(hour,difference))+geom_area()

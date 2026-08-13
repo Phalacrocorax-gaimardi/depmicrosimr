@@ -21,6 +21,8 @@
 #' @param prices_scen tariff prices dataframe
 #' @param social_network social network
 #' @param eta eta flex parameter value
+#' @param gamma gamma parameter choice
+#'
 #'
 #' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
 #' @export
@@ -28,7 +30,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.5){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.2,gamma=40){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% c(0.1,0.2,0.5,1,2))
@@ -60,7 +62,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #rollout year
   #add flex params
   agents_in$eta <- eta
-  agents_in$gamma <- 10
+  agents_in$gamma <- gamma
   #generate "flexibility scores" (hourly MAD load-shifting values) range from min_flex to max_flex%
   min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)
   max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)
@@ -70,7 +72,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
   #sample flexible parameter values based on flex_score
-  score_cube <- flex_score_cube(eta)
+  score_cube <- flex_score_cube(eta,gamma)
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score,score_cube)) %>% dplyr::ungroup()
   #rescale eta and gamma parameters according to mean hourly demand
   # reduced effect of quadratic

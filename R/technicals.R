@@ -589,18 +589,19 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \tau} couples.
 #' It is based on the 3-hour flexibility score.
 #' @param eta eta parameter assumption
+#' @param gamma gamma parameter assumption
 #' @returns
 #' @export
 #'
 #' @examples
 #' flex_score_cube()
-flex_score_cube <- function(eta=0.2){
+flex_score_cube <- function(eta=0.2,gamma=40){
 
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
     flex_3hr ~ s(phi, tau, k = 15),
     family = gaussian(link = "log"), # Forces non-negative predictions
-    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta) %>% dplyr::select(phi,gamma,eta,tau,flex_3hr)
+    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta,gamma==.$gamma) %>% dplyr::select(phi,gamma,eta,tau,flex_3hr)
   )
   # fine-graining
   phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 100)
@@ -632,7 +633,7 @@ flex_score_cube <- function(eta=0.2){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.2)
+#' score_cube <- flex_score_cube(0.2,40)
 #' match_flex_params(25.4,score_cube)
 #' replicate(100,match_flex_params(25.4,score_cube)$tau) %>% mean()
 #' replicate(100,match_flex_params(25.4,score_cube)$phi) %>% mean()
@@ -731,10 +732,10 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, ta
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
 
   #Scale parameter by the flexible load
-  gamma_scaled <- gamma * (8760 / kWh)
-  eta_scaled   <- eta * (8760 / kWh)
+  #gamma_scaled <- gamma * (8760 / kWh)
+  #eta_scaled   <- eta * (8760 / kWh)
   if (tariff_plan != "flat"){
-    df <- get_flex(df, phi, gamma_scaled, eta_scaled, tau)
+    df <- get_flex(df, phi, gamma, eta, tau)
     df <- df |> dplyr::select(datetime,price,load,load_opt) |> dplyr::rename("natural_load"=load,"optimised_load"=load_opt)}
   else{
 
@@ -797,7 +798,7 @@ get_aggregate_profile <- function(year,abm,prices_scen){
 #' @param eta dimensionless ramping penalty
 #' @param tau energy recorovery horizon
 #' @param kernel chocie of kerel, default "exp"
-#' @param natural_profile L{1 or LP3 at the moment}
+#' @param natural_profile LP1 or LP3 at the moment
 #' @param prices_scen price scenario
 #'
 #' @returns
