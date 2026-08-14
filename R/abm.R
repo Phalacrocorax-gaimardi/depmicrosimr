@@ -30,10 +30,11 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.2,gamma=40){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.2,gamma=50){
 
   #agents_in has a minimal set of survey data
-  stopifnot(eta %in% c(0.1,0.2,0.5,1,2))
+  stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
+
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
   #
   agents_in <- dep_survey %>% dplyr::select(serial,q14,q15,q41,Q41_oth,qc1,qg,qi)

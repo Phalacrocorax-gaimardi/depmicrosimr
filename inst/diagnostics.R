@@ -295,23 +295,23 @@ get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_sc
 
 #test gamma-tau scaling
 
-gamma <- 40
+
 flex_scores_new <- tibble()
 #flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
-for(eta in seq(0,0.8,by=0.2))
+for(eta in 5)
  for(tariff_plan in c("tou","dynamic"))
   for(phi in seq(0,0.8,by=0.2))
-   # for(gamma in c(1,10,20,50))
+   for(gamma in c(1,10,20,50,100))
       for(tau in c(6,12,18,24,30,36,48,60,72))
       {
           print(paste("phi=",phi,"tau=",tau))
           flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"exp","LP1",prices_scen))
         }
 
-flex_scores_new0 <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
-flex_scores_new <- flex_scores_new0 %>% bind_rows(flex_scores_new)
+flex_scores <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+flex_scores <- flex_scores %>% bind_rows(flex_scores_new)
 #
-write_csv()
+#write_csv(flex_scores,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
 
 #make flex scores table
 
@@ -576,12 +576,28 @@ get_full_annual_cost <- function (yeartime = 2030, kWh = 8760, tariff_plan, phi 
 # ===============================
 # flexible profile check
 # Does ToU profile looks like LP2?
+# find optimal values of gamma and eta
 # =================================
 # ===================================
 
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.5,gamma=40)
+
+profiler <- function(eta,gamma,N=10){
+  #
+  agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=eta,gamma=gamma)
+  agents_init <- agents_init %>% filter(natural_profile=="lp1")
+  n_agent <- dim(agents_init)[1]
+  print("n_agent=",n_agent)
+  res <- get_aggregate_test_profile(2026,agents_init[sample(1:n_agent,N),],"tou",prices_scen)
+  res <- res %>% inner_join(load_profiles,by="datetime") %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load))
+  res <- res %>% mutate(err=abs(optimised_load_profile-lp2))
+  sum(res$err)
+}
+
+#profiler(0.4,10,100) 0.225
+#profiler(0.4,20,100) 0.1676211
+#profiler(0.4,50,100)
 
 demand <- prices_scen
 demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2030)
@@ -599,8 +615,6 @@ test0  %>% ggplot() + geom_line(aes(hour,load),linetype="dotted") + geom_line(ae
 test <- get_profile(2025,4000,"tou",0.8,10,0.1,48,"LP1",prices_scen)
 
 test %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load))
-
-tou_tariffs <- tou_tariffs %>% mutate(f_inflexibility=replace(f_inflexibility, start %in% c(7,8,8),4))
 
 get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen){
 
@@ -621,7 +635,6 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
 
 }
 
-res <- get_aggregate_test_profile(2025,agents_init[1:10,],"tou",prices_scen)
 
 g1 <- res %>% filter(week(datetime)==20) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
 g1 <- g1 + theme_minimal()
@@ -631,6 +644,10 @@ g2 <- g2 + theme_minimal()
 #
 #dev.new()
 g1/g2 + plot_annotation(title = "eta=0.5")
+
+#match aggregate profile to LP2
+
+
 
 
 obsv_shift <- load_profiles %>% group_by(hour=hour(datetime)) %>% summarise(obsv_diff=mean(lp1-lp2))

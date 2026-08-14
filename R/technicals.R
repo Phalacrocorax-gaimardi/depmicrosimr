@@ -599,6 +599,8 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #' flex_score_cube()
 flex_score_cube <- function(eta=0.2,gamma=10){
 
+  stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
+
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
     flex_3hr ~ s(phi, tau, k = 15),
@@ -635,7 +637,7 @@ flex_score_cube <- function(eta=0.2,gamma=10){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.5,40)
+#' score_cube <- flex_score_cube(0.4,20)
 #' match_flex_params(25.4,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
@@ -799,7 +801,7 @@ get_aggregate_profile <- function(year,abm,prices_scen){
 #' @param eta dimensionless ramping penalty
 #' @param tau energy recorovery horizon
 #' @param kernel chocie of kerel, default "exp"
-#' @param natural_profile L{1 or LP3 at the moment}
+#' @param natural_profile L1 or LP3 at the moment
 #' @param prices_scen price scenario
 #'
 #' @returns

@@ -10,7 +10,7 @@ initialise_agents(
   prices_scen,
   social_network,
   eta = 0.2,
-  gamma = 40
+  gamma = 50
 )
 }
 \arguments{
