@@ -29,8 +29,8 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.2,gamma=50){
+#' initialise_agents(sD,2019,prices_scen,social_network,0.6,50)
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,gamma=50){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
@@ -65,8 +65,8 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in$eta <- eta
   agents_in$gamma <- gamma
   #generate "flexibility scores" (hourly MAD load-shifting values) range from min_flex to max_flex%
-  min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)
-  max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)
+  min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)*100
+  max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)*100
   #scale heterogeneous flexibilities to lie between min_flex and max_flex
   agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)

@@ -591,13 +591,16 @@ profiler <- function(eta,gamma,N=10){
   print("n_agent=",n_agent)
   res <- get_aggregate_test_profile(2026,agents_init[sample(1:n_agent,N),],"tou",prices_scen)
   res <- res %>% inner_join(load_profiles,by="datetime") %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load))
-  res <- res %>% mutate(err=abs(optimised_load_profile-lp2))
+  res <- res %>% mutate(err=abs(optimised_load_profile-lp2),rel_err = abs(optimised_load_profile-lp2)/lp2)
   sum(res$err)
 }
 
 #profiler(0.4,10,100) 0.225
 #profiler(0.4,20,100) 0.1676211
-#profiler(0.4,50,100)
+#profiler(0.4,50,100)  0.1647912
+#profiler(0.4,100,100) 0.2152141
+#profiler(0.8,50,100) 0.1785838
+
 
 demand <- prices_scen
 demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2030)

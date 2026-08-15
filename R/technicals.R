@@ -597,7 +597,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #'
 #' @examples
 #' flex_score_cube()
-flex_score_cube <- function(eta=0.2,gamma=10){
+flex_score_cube <- function(eta=0.6,gamma=50){
 
   stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
 
@@ -637,7 +637,7 @@ flex_score_cube <- function(eta=0.2,gamma=10){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.4,20)
+#' score_cube <- flex_score_cube(0.6,50)
 #' match_flex_params(25.4,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
