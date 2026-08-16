@@ -4,7 +4,7 @@
 \alias{flex_score_cube}
 \title{flex_score_cube}
 \usage{
-flex_score_cube(eta = 0.6, gamma = 50)
+flex_score_cube(eta = 0.6, gamma = 10)
 }
 \arguments{
 \item{eta}{eta parameter assumption}

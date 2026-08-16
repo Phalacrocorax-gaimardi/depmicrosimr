@@ -597,15 +597,15 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #'
 #' @examples
 #' flex_score_cube()
-flex_score_cube <- function(eta=0.6,gamma=50){
+flex_score_cube <- function(eta=0.6,gamma=10){
 
   stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
 
   #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
   surface_model <- mgcv::gam(
-    flex_3hr ~ s(phi, tau, k = 15),
+    flex_1hr ~ s(phi, tau, k = 15),
     family = gaussian(link = "log"), # Forces non-negative predictions
-    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta,gamma==.$gamma) %>% dplyr::select(phi,gamma,eta,tau,flex_3hr)
+    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta,gamma==.$gamma) %>% dplyr::select(phi,gamma,eta,tau,flex_1hr)
   )
   # fine-graining
   phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 100)
@@ -622,7 +622,7 @@ flex_score_cube <- function(eta=0.6,gamma=50){
 
 #' match_flex_params
 #'
-#' This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the MAE 3-hourly load-shifting
+#' This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the 1-hourly load-shifting index
 #' quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
 #' \cr
 #' The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
@@ -637,8 +637,8 @@ flex_score_cube <- function(eta=0.6,gamma=50){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.6,50)
-#' match_flex_params(25.4,score_cube)
+#' score_cube <- flex_score_cube(0.6,10)
+#' match_flex_params(15.4,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
   #

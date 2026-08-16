@@ -15,7 +15,7 @@ match_flex_params(x, score_cube)
 single row dataframe
 }
 \description{
-This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the MAE 3-hourly load-shifting
+This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the 1-hourly load-shifting index
 quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
 \cr
 The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
@@ -23,7 +23,7 @@ flex_scores.\cr
 For ToU parameter inference tau is set at
 }
 \examples{
-score_cube <- flex_score_cube(0.6,50)
-match_flex_params(25.4,score_cube)
+score_cube <- flex_score_cube(0.6,10)
+match_flex_params(15.4,score_cube)
 
 }
