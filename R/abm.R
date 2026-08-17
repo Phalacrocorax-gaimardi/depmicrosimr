@@ -8,13 +8,21 @@
 #' \cr
 #' 14% of households are on the old (dual meter) day/night tariff.\cr
 #' \cr
-#' 3-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-#' a cost parameter (\eqn{\gamma}) and the load mean reversion timescale (\eqn{\tau}).\cr
+#' The household flexilities (normally distributed around zero) inferred from survey are assumed to represent logarithms of the hourly flexibility in response to
+#' ToU pricing. This flexibility index is between 0 & 1.
+#' \deqn{\frac{1}{2} \frac{ \sum_t | l(t)-l^0(t) |}{\sum_t l^0(t)} }\cr
+#' \cr
+#' 4-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
+#' a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}} and the load mean reversion timescale (\eqn{\tau}).The current version fixes
+#' adjusts \eqn{\gamma} and \eqn{\eta} so that the aggregate flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
+#' in flexibility is described by \eqn{\phi-\tau} parameter pair.\cr
 #' \cr
 #' Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
 #' \cr
 #' \cr
 #' The nework input is used to determine the social degree of each agent.
+#'
+#'
 #'
 #' @param scen scenario design dataframe e.g. sD
 #' @param start_year default 2019
@@ -30,7 +38,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network,0.6,50)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,gamma=50){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,gamma=1){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
@@ -64,11 +72,18 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #add flex params
   agents_in$eta <- eta
   agents_in$gamma <- gamma
-  #generate "flexibility scores" (hourly MAD load-shifting values) range from min_flex to max_flex%
-  min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)*100
-  max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)*100
-  #scale heterogeneous flexibilities to lie between min_flex and max_flex
-  agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
+  #generate "flexibility scores" (hourly MAD load-shifting index) range from min_flex to max_flex%
+
+  #min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)*100
+  #max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)*100
+  #interpret survey flexibilities as log(1h flexibility index) (lognormal distributed)
+  #agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
+
+  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(100,16.5*exp(2.5*flexibility)))
+
+  #check weighted mean flexibility
+  #weighted_sum <- agents_in %>% dplyr::mutate(w= 1/kWh/sum(1/kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
+  #print(paste("weighted mean sum of household flexibilities", weighted_sum,"% vs lp1-lp2 flexibility 14.4%"))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
