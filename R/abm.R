@@ -4,18 +4,19 @@
 
 #' initialise_agents
 #'
-#' sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
+#' initialise_agents() sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
 #' \cr
-#' 14% of households are on the old (dual meter) day/night tariff.\cr
-#' \cr
-#' The household flexilities (normally distributed around zero) inferred from survey are assumed to represent logarithms of the hourly flexibility in response to
-#' ToU pricing. This flexibility index is between 0 & 1.
+#' The stated household "flexibility" inferred from survey are normally distributed around zero. These assumed to represent logarithms of hourly flexibility in response to
+#' ToU pricing. This flexibility score index lies between 0 & 1.
 #' \deqn{\frac{1}{2} \frac{ \sum_t | l(t)-l^0(t) |}{\sum_t l^0(t)} }\cr
 #' \cr
 #' 4-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-#' a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}} and the load mean reversion timescale (\eqn{\tau}).The current version fixes
-#' adjusts \eqn{\gamma} and \eqn{\eta} so that the aggregate flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
-#' in flexibility is described by \eqn{\phi-\tau} parameter pair.\cr
+#' a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}) and the load mean reversion timescale (\eqn{\tau}).The current version fixes
+#' adjusts \eqn{\gamma} and \eqn{\eta} so that the *aggregate* flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
+#' in flexibility is described by \eqn{\phi-\tau} parameter pair. In general the aggregrate flexibilty is lower than the weighted sum of household flexibilities
+#' \deqn{f_{aggregate} < sum_i^N w_i f_i} weighted by the individual household annual demand.
+#'
+#' \cr
 #' \cr
 #' Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
 #' \cr
@@ -74,12 +75,12 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in$gamma <- gamma
   #generate "flexibility scores" (hourly MAD load-shifting index) range from min_flex to max_flex%
 
-  #min_flex <- scen %>% dplyr::filter(parameter=="min_flex") %>% dplyr::pull(value)*100
-  #max_flex <- scen %>% dplyr::filter(parameter=="max_flex") %>% dplyr::pull(value)*100
+  flex_scale <- scen %>% dplyr::filter(parameter=="flex_scale.") %>% dplyr::pull(value)
+  flex_sigma <- scen %>% dplyr::filter(parameter=="flex_sigma.") %>% dplyr::pull(value)
   #interpret survey flexibilities as log(1h flexibility index) (lognormal distributed)
   #agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
 
-  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(100,16.5*exp(2.5*flexibility)))
+  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(100,flex_scale*exp(flex_sigma*flexibility)))
 
   #check weighted mean flexibility
   #weighted_sum <- agents_in %>% dplyr::mutate(w= 1/kWh/sum(1/kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
