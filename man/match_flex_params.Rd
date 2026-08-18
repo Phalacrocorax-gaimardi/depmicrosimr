@@ -23,7 +23,7 @@ flex_scores.\cr
 For ToU parameter inference tau is set at
 }
 \examples{
-score_cube <- flex_score_cube(0.6,10)
-match_flex_params(15.4,score_cube)
+score_cube <- flex_score_cube(0.4,20)
+match_flex_params(60,score_cube)
 
 }

@@ -588,7 +588,7 @@ profiler <- function(eta,gamma,N=10){
   agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=eta,gamma=gamma)
   agents_init <- agents_init %>% filter(natural_profile=="lp1")
   n_agent <- dim(agents_init)[1]
-  print("n_agent=",n_agent)
+  print(paste("n_agent=",n_agent))
   res <- get_aggregate_test_profile(2026,agents_init[sample(1:n_agent,N),],"tou",prices_scen)
   res <- res %>% inner_join(load_profiles,by="datetime") %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load))
   res <- res %>% mutate(err=abs(optimised_load_profile-lp2),rel_err = abs(optimised_load_profile-lp2)/lp2)
@@ -599,7 +599,18 @@ profiler <- function(eta,gamma,N=10){
 #profiler(0.4,20,100) 0.1676211
 #profiler(0.4,50,100)  0.1647912
 #profiler(0.4,100,100) 0.2152141
-#profiler(0.8,50,100) 0.1785838
+profiler(0.6,2,10)
+
+flex_scores <- flex_scores %>% arrange(phi,gamma,eta,tau)
+df_err <- tibble()
+for(eta in flex_scores$eta %>% unique())
+  for(gamma in flex_scores %>% filter(gamma <= 5) %>% pull(gamma) %>% unique()){
+    print(paste(gamma,eta))
+    df <- tibble(eta=eta,gamma=gamma) %>% mutate(err=profile(eta,gamma,10))
+    print(df)
+    write_csv(df, "~/Policy/CAMG/Dynamic Pricing/df_err.csv",append=T)
+    df_err <- df_err %>% bind_rows(df)
+  }
 
 
 demand <- prices_scen
@@ -638,11 +649,16 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
 
 }
 
+agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.8,gamma=20)
 
-g1 <- res %>% filter(week(datetime)==20) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
+agents_in <- agents_init %>% filter(natural_profile=="lp1")
+n_agents <- dim(agents_in)[1]
+res <- get_aggregate_test_profile(2026,agents_in[sample(1:n_agents,50),],"tou",prices_scen)
+
+g1 <- res %>% filter(week(datetime)==24) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
 g1 <- g1 + theme_minimal()
 
-g2 <- load_profiles %>% filter(week(datetime)==20) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
+g2 <- load_profiles %>% filter(week(datetime)==24) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
 g2 <- g2 + theme_minimal()
 #
 #dev.new()
@@ -650,8 +666,9 @@ g1/g2 + plot_annotation(title = "eta=0.5")
 
 #match aggregate profile to LP2
 
-
-
+res <- res %>% inner_join(load_profiles)
+res <- res %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load)) %>% mutate(err=abs(optimised_load_profile-lp2))
+sum(res$err)
 
 obsv_shift <- load_profiles %>% group_by(hour=hour(datetime)) %>% summarise(obsv_diff=mean(lp1-lp2))
 model_shift <-  res  %>% group_by(hour=hour(datetime)) %>% summarise(model_diff=mean(natural_load-optimised_load))
@@ -662,7 +679,13 @@ coef <- lm(model_diff~obsv_diff,shift) %>% coefficients()
 shift <- shift %>% mutate(obsv_diff= coef[2]*obsv_diff)
 
 g <- shift %>% pivot_longer(-hour) %>% filter(name != "ratio") %>% ggplot(aes(hour,-value,colour=name))+geom_line(linewidth=2) + theme_minimal()
-g g + scale_colour_canva(palette="Playful greens and blues")
+ g + scale_colour_canva(palette="Playful greens and blues")
 
 
 shift %>% ggplot(aes(hour,difference))+geom_area()
+
+
+######################
+# mean
+#######################
+

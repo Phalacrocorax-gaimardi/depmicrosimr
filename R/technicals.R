@@ -590,34 +590,48 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #'
 #' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
 #' It is based on the 3-hour flexibility score.
-#' @param eta eta parameter assumption
-#' @param gamma gamm parameter assumption
+#' @param eta_targ eta parameter assumption
+#' @param gamma_targ gamm parameter assumption
 #' @returns
 #' @export
 #'
 #' @examples
-#' flex_score_cube()
-flex_score_cube <- function(eta=0.6,gamma=10){
+#' flex_score_cube(0.6,10) %>% dplyr::slice_max(flex_score)
+#' flex_scores %>% dplyr::filter(eta==0.6,gamma==20)  %>% dplyr::slice_max(flex_1hr)
+flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
 
-  stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
+  train_data <- flex_scores %>%
+    dplyr::filter(
+      tariff_plan == "tou",
+      eta == eta_targ,
+      gamma == gamma_targ
+    )
 
-  #flex_scores1 <- flex_scores %>% dplyr::filter(flex_score <= max_flex)
-  surface_model <- mgcv::gam(
-    flex_1hr ~ s(phi, tau, k = 15),
-    family = gaussian(link = "log"), # Forces non-negative predictions
-    data = flex_scores %>% dplyr::filter(tariff_plan=="dynamic",eta==.$eta,gamma==.$gamma) %>% dplyr::select(phi,gamma,eta,tau,flex_1hr)
+  #pivot
+  grid_wide <- train_data %>%
+    dplyr::select(phi, tau, flex_1hr) %>%
+    dplyr::arrange(tau, phi) %>%
+    tidyr::pivot_wider(names_from = phi, values_from = flex_1hr)
+
+  orig_tau <- grid_wide$tau                           # length(y) = nrow(Z)
+  orig_phi <- as.numeric(colnames(grid_wide)[-1])     # length(x) = ncol(Z)
+  Z_mat    <- as.matrix(grid_wide[, -1])              # dim: length(tau) x length(phi)
+
+  # dense grid
+  new_phi <- seq(min(flex_scores$phi), max(flex_scores$phi), length.out = 100)
+  new_tau <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 100)
+  dense_grid <- tidyr::expand_grid(phi = new_phi, tau = new_tau)
+
+  dense_grid$flex_score <- pracma::interp2(
+    x = orig_phi,
+    y = orig_tau,
+    Z = Z_mat,
+    xp = dense_grid$phi,
+    yp = dense_grid$tau,
+    method = "linear"
   )
-  # fine-graining
-  phi_grid   <- seq(min(flex_scores$phi),   max(flex_scores$phi),   length.out = 100)
-  #gamma_grid <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 80)
-  tau_grid <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 100)
 
-  # Expand into a dense 2D grid matrix (40,000 points)
-  dense_grid <- tidyr::expand_grid(phi = phi_grid,tau=tau_grid)
-  # Predict the continuous flex_scores across the entire surface
-  dense_grid$flex_score <- predict(surface_model, newdata = dense_grid, type = "response")
-  dense_grid %>% return()
-
+  return(dense_grid)
 }
 
 #' match_flex_params
@@ -637,11 +651,12 @@ flex_score_cube <- function(eta=0.6,gamma=10){
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.6,10)
-#' match_flex_params(15.4,score_cube)
+#' score_cube <- flex_score_cube(0.4,20)
+#' match_flex_params(60,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
   #
+  res <- if(x < score_cube %>% dplyr::slice_max(flex_score) %>% dplyr::pull(flex_score)){
   tol <- 0.1
   #coordinates of the contour line at height x
   xmax <- max(score_cube$flex_score)
@@ -649,7 +664,9 @@ match_flex_params <- function(x,score_cube){
   x <- max(xmin,x)
   x <- min(x,xmax)
   matching_triples <- score_cube %>% dplyr::filter(abs(flex_score - x) <= tol) %>% dplyr::select(phi,tau)
-  matching_triples %>% dplyr::slice_sample()
+  matching_triples %>% dplyr::slice_sample()}
+  else {tibble::tibble(phi=NA,tau=NA)}
+  return(res)
 
 }
 

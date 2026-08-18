@@ -4,17 +4,18 @@
 \alias{flex_score_cube}
 \title{flex_score_cube}
 \usage{
-flex_score_cube(eta = 0.6, gamma = 10)
+flex_score_cube(eta_targ = 0.6, gamma_targ = 10)
 }
 \arguments{
-\item{eta}{eta parameter assumption}
+\item{eta_targ}{eta parameter assumption}
 
-\item{gamma}{gamm parameter assumption}
+\item{gamma_targ}{gamm parameter assumption}
 }
 \description{
 utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
 It is based on the 3-hour flexibility score.
 }
 \examples{
-flex_score_cube()
+flex_score_cube(0.6,10) \%>\% dplyr::slice_max(flex_score)
+flex_scores \%>\% dplyr::filter(eta==0.6,gamma==20)  \%>\% dplyr::slice_max(flex_1hr)
 }

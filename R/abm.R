@@ -38,7 +38,7 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network,0.6,50)
+#' initialise_agents(sD,2019,prices_scen,social_network,0.4,1)
 initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,gamma=1){
 
   #agents_in has a minimal set of survey data
@@ -80,11 +80,11 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #interpret survey flexibilities as log(1h flexibility index) (lognormal distributed)
   #agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
 
-  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(100,flex_scale*exp(flex_sigma*flexibility)))
+  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(70,flex_scale*exp(flex_sigma*flexibility))) #
 
   #check weighted mean flexibility
-  #weighted_sum <- agents_in %>% dplyr::mutate(w= 1/kWh/sum(1/kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  #print(paste("weighted mean sum of household flexibilities", weighted_sum,"% vs lp1-lp2 flexibility 14.4%"))
+  weighted_sum <- agents_in %>% dplyr::mutate(w= 1/kWh/sum(1/kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
+  print(paste("weighted mean sum of household flexibilities", weighted_sum,"% vs lp1-lp2 flexibility 14.4%"))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
