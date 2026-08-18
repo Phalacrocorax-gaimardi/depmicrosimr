@@ -596,8 +596,8 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #' @export
 #'
 #' @examples
-#' flex_score_cube(0.6,10) %>% dplyr::slice_max(flex_score)
-#' flex_scores %>% dplyr::filter(eta==0.6,gamma==20)  %>% dplyr::slice_max(flex_1hr)
+#' flex_score_cube(0.8,10) %>% dplyr::slice_max(flex_score)
+#' flex_scores %>% dplyr::filter(eta==0.4,gamma==1)  %>% dplyr::slice_max(flex_1hr)
 flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
 
   train_data <- flex_scores %>%
@@ -964,6 +964,10 @@ get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, 
 #' @export
 #'
 #' @examples
+#' prices_scen <- set_prices(sD)
+#' get_flex_scores(sD,2026,8760,"tou",0,1,0.6,48,"exp","LP1",prices_scen)
+#' get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
+#'
 get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,profile="LP1",prices_scen){
   #
   demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==year)
@@ -972,13 +976,13 @@ get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,p
   demand <- demand %>% dplyr::filter(tariff_plan==.env$tariff_plan) %>% dplyr::select(datetime,price,load)
   flex <- get_flex(demand,phi,gamma,eta,tau,kernel,precision = 1e-3)
   flex_1hr <- 100*sum(abs((flex$load_opt-flex$load)))/(2*kWh) #Total variation distance factor of 2
-  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "3 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "3 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_3hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
-  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "6 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "6 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_6hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
-  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "12 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "12 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_12hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
-  flex1 <- flex %>% group_by(period = floor_date(datetime, unit = "24 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
+  flex1 <- flex %>% dplyr::group_by(period = lubridate::floor_date(datetime, unit = "24 hours"))%>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_24hr <- 100*sum(abs((flex1$load_opt-flex1$load)))/(2*kWh)
 
   flex1 <- flex %>% dplyr::group_by(lubridate::yday(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))

@@ -57,7 +57,9 @@ get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limi
 Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
 \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr
 \cr
-The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor $f_t$.
+The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor \eqn{f_t}. This is inferred from the lowest quantile of smart meter dataset. Generally \eqn{f_t > 1} at night and less than one during the day. The inflexible fraction is defined as
+\deqn{ \phi_t = \phi-(1-\phi)\log(1-\phi)*(f_t-1)}
+This has the desired properties the mean of \eqn{\phi_t} equals \eqn{\phi} and \eqn{\phi_t \rightarrow 1} as \eqn{\phi \rightarrow 1}, irrespective of \eqn{f_t}.
 }
 \examples{
 
@@ -66,6 +68,6 @@ demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
 demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
 demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
 demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0.5,gamma=10,eta=0.5,tau=48,kernel="exp")
+test <- get_flex(demand,phi=0.9999,gamma=10,eta=0.5,tau=48,kernel="exp")
 100*sum(abs(test$load_opt-test$load))/8760
 }

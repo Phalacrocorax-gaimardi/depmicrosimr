@@ -36,8 +36,9 @@
 #' Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
 #' \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr
 #' \cr
-#' The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor $f_t$.
-#'
+#' The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor \eqn{f_t}. This is inferred from the lowest quantile of smart meter dataset. Generally \eqn{f_t > 1} at night and less than one during the day. The inflexible fraction is defined as
+#' \deqn{ \phi_t = \phi-(1-\phi)\log(1-\phi)*(f_t-1)}
+#' This has the desired properties the mean of \eqn{\phi_t} equals \eqn{\phi} and \eqn{\phi_t \rightarrow 1} as \eqn{\phi \rightarrow 1}, irrespective of \eqn{f_t}.
 #'
 #'
 #' @param demand a 3 column dataframe of datetime, hourly prices and natural_load
@@ -59,7 +60,7 @@
 #' demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
 #' demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
 #' demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
-#' test <- get_flex(demand,phi=0.5,gamma=10,eta=0.5,tau=48,kernel="exp")
+#' test <- get_flex(demand,phi=0.9999,gamma=10,eta=0.5,tau=48,kernel="exp")
 #' 100*sum(abs(test$load_opt-test$load))/8760
 get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="exp",precision=1e-4) {
   # T = Total horizon in hours
@@ -68,12 +69,22 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   #maximum import capacity
   stopifnot(kernel %in% c("exp","gauss","cauchy","matern"))
 
+  #fully inflexible case os pathological for osqp
+  if(phi == 1){
+    demand$fload=0
+    demand$x =0
+    demand$load_opt=demand$load
+    demand$baseload=demand$load
+    return(demand)
+  }
+
   P_max <- sD %>% dplyr::filter(parameter=="mic") %>% dplyr::pull(value)
   demand <- demand %>% dplyr::arrange(datetime) %>% dplyr::mutate(hour=lubridate::hour(datetime))
   demand <- demand %>% dplyr::inner_join(diurnal_inflex)
   T_total <- nrow(demand)
-  #define the flexible load, including time of day modulatio
-  demand <- demand %>% dplyr::mutate(phi_t=pmin(1,phi*f)) %>% dplyr::mutate(fload=(1-phi_t)*load)
+  #define the flexible load, including time of day modulation
+  #transformation ensures that phi_t -> 1 when phi -> 1 iresepctive of f
+  demand <- demand %>% dplyr::mutate(phi_t=phi - (1-phi)*log(1-phi)*(f-1)) %>% dplyr::mutate(fload=(1-phi_t)*load)
   fload <- demand$fload #the part of the load that is flexible and modelled
   #print(paste("mean load =", mean(fload)))
   price <- demand$price
@@ -172,7 +183,6 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   demand <- demand %>% dplyr::select(-hour,-f,-phi_t)
   return(demand)
 }
-
 
 
 #' get_price_load_scen

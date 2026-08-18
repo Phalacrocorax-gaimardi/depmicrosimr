@@ -39,7 +39,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network,0.4,1)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,gamma=1){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,gamma=1){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)

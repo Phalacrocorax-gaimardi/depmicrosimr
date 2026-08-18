@@ -47,3 +47,9 @@ Evaluates a mesure of how much load has been shifted (flexibility) in response a
 \cr
 The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
 }
+\examples{
+prices_scen <- set_prices(sD)
+get_flex_scores(sD,2026,8760,"tou",0,1,0.6,48,"exp","LP1",prices_scen)
+get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
+
+}

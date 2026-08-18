@@ -16,6 +16,6 @@ utility function used by match_flex_params(). fex_score_cube() returns a table o
 It is based on the 3-hour flexibility score.
 }
 \examples{
-flex_score_cube(0.6,10) \%>\% dplyr::slice_max(flex_score)
-flex_scores \%>\% dplyr::filter(eta==0.6,gamma==20)  \%>\% dplyr::slice_max(flex_1hr)
+flex_score_cube(0.8,10) \%>\% dplyr::slice_max(flex_score)
+flex_scores \%>\% dplyr::filter(eta==0.4,gamma==1)  \%>\% dplyr::slice_max(flex_1hr)
 }
