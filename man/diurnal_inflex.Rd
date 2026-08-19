@@ -7,8 +7,8 @@
 \format{
 A data frame with 24 rows and 2 variables:
 \describe{
-  \item{\code{hour}}{double 0-23}
-  \item{\code{f}}{double inflexibility weight}
+\item{\code{hour}}{double 0-23}
+\item{\code{f}}{double inflexibility weight}
 }
 }
 \usage{
@@ -19,6 +19,6 @@ the relative variation of baseload share during the day. The overal share of inf
 \eqn{\sum_h f_h = 24}
 }
 \details{
-based on 5% quantiles of hourly profiles of 600 households with no solar PV.
+based on 5\% quantiles of hourly profiles of 600 households with no solar PV.
 }
 \keyword{datasets}

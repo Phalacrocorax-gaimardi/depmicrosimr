@@ -35,20 +35,18 @@ social <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 agents_in <- initialise_agents(sD,2019,prices_scen,social)
 
 scen <- sD
-scen <- scen %>% mutate(value=replace(value,parameter=="theta.",0.2))
-abm_theta_0.2 <- runABM(scen,4,2040,use_parallel = T)
+scen <- scen %>% mutate(value=replace(value,parameter=="theta.",0.))
+abm <- runABM(scen,1,2029,use_parallel = T)
 
-abm_theta_0.1 <- read_rds("~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.1.RData")
+abm_neutral <- read_rds("~/Policy/CAMG/Dynamic Pricing/ABM_outputs/neutral.RData")
 #write_rds(abm_theta_0.2,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.0.RData")
 
-
-
-uptake2 <- abm_theta_0.1[[1]] %>% group_by(date) %>% count(tariff_plan)
-uptake2$theta_max <- 0.1
+uptake2 <- abm_neutral[[1]] %>% group_by(date) %>% count(tariff_plan)
+uptake2$theta_max <- 0.
 
 uptake <- uptake2 %>% bind_rows(uptake1)
 
-g <- uptake %>% ggplot(aes(date,n/1217,fill=tariff_plan))+geom_area() +theme_minimal() + facet_wrap(.~theta_max)
+g <- uptake2 %>% ggplot(aes(date,n/1217,fill=tariff_plan))+geom_area() +theme_minimal() + facet_wrap(.~theta_max)
 g <- g + scale_fill_canva(palette = "Fun and cheerful") + geom_vline(xintercept = ymd("2026-01-01"),linetype="dotted")
 export::graph2ppt(g,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/uptake.ppt")
 
@@ -163,16 +161,18 @@ for(kWh in seq(1000,20000,by=1000)){
 
 df %>% ggplot()+geom_line(aes(kWh,annual_bill_inflexible)) + geom_line(aes(kWh,annual_bill_flexible),colour="red")
 
-#gamma dependence
+#phi-tau dependence
+#recall:
 prices_scen <- set_prices(sD)
 df <- tibble()
-for(tau in 72)
-for(gamma in seq(0.2,20,by=0.2)){
-  df0 <- tariff_plan_bills(8760,0.25,gamma,0.2,tau,"LP1",2030,2020,prices_scen)
-  df0$phi <- 0.25
-  df0$gamma <- gamma
-  df0$eta <- 0.25
+for(phi in seq(0,1,by=0.1))
+for(tau in c(6,12,24,36,48,60,72)){
+  df0 <- tariff_plan_bills(8760,phi,2,0.4,tau,"LP1",2030,2020,prices_scen)
+  df0$phi <- phi
+  df0$gamma <- 2
+  df0$eta <- 0.4
   df0$tau <- tau
+  df$kWh <- 8760
   df <- df %>% bind_rows(df0)
 }
 
@@ -648,7 +648,7 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
 
 }
 
-agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.8,gamma=20)
+agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.4,gamma=2)
 
 agents_in <- agents_init %>% filter(natural_profile=="lp1")
 n_agents <- dim(agents_in)[1]

@@ -167,7 +167,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   u <- c(0, P_max - demand$load)
 
   # 5. Solve using OSQP
-  settings <- osqp::osqpSettings(eps_abs = precision, eps_rel = precision, verbose = TRUE,max_iter = 10000)
+  settings <- osqp::osqpSettings(eps_abs = precision, eps_rel = precision, verbose = FALSE,max_iter = 10000)
   model <- osqp::osqp(P = P, q = q, A = A, l = l, u = u, pars = settings)
   res <- model@Solve()
 
@@ -256,13 +256,9 @@ get_annual_cost <- function(yeartime, kWh, tariff_plan, phi=0.5, gamma=0.25, eta
   df$load <- df[[profile]] * kWh
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
 
-  #Scale parameter by the flexible load
-  gamma_scaled <- gamma * (8760 / kWh)
-  eta_scaled   <- eta * (8760 / kWh)
-
   # 5. Calculate flexible loads conditionally
   if (tariff_plan != "flat") {
-    df <- get_flex(df, phi, gamma_scaled, eta_scaled, tau)
+    df <- get_flex(df, phi, gamma, eta, tau)
     bill_inflex <- sum(df$price * df$load)
     bill_flex   <- sum(df$price * df$load_opt)
     print(paste("flexibility score", 100*mad(df$load_opt/df$load-1)))
@@ -516,5 +512,344 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",yearti
   }
   df <- df %>% dplyr::rename("annual_bill"=annual_bill_flexible)
   return(df %>% dplyr::arrange(annual_bill))
+}
+
+
+
+#' get_prospect_costs
+#'
+#' Computes everything a prospect-theory certainty-equivalent calculation needs for one household:
+#' the flat-tariff annual cost, and the tou/dynamic annual costs both with and without the household's
+#' optimal load-shifting response \emph{plus} the underlying hourly load profiles themselves (original,
+#' tou-optimized, dynamic-optimized), not just the annual totals.
+#'
+#' Unlike \code{tariff_plan_bills()} or \code{get_annual_cost()}, this does not discard \code{get_flex()}
+#' hourly output after summing it \code{get_flex()} is run once per available plan (\code{tou},
+#' \code{dynamic}), and both the annual total \code{and} the hourly profile it produced are kept.
+#'
+#' Plan availability at \code{yeartime} follows the same rule as \code{tariff_plan_bills()}: only
+#' \code{flat} before the household's smart meter rollout, \code{flat}+\code{tou} once rolled out but
+#' before dynamic pricing is introduced (2026.5), and all three plans after. Costs for plans that aren't
+#' yet available are \code{NA}; their profiles are simply absent from the returned list.
+#'
+#' @param kWh annual householdload
+#' @param phi \eqn{\phi}
+#' @param gamma \eqn{\gamma}
+#' @param eta \eqn{\eta}
+#' @param tau \eqn{\tau}
+#' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
+#' @param yeartime current decimal time
+#' @param smart_rollout smart meter rollout time
+#' @param prices_scen price scenario
+#'
+#' @returns a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,
+#'   det_noflex, det_flex) and \code{profiles} (a named list of hourly \code{(datetime, price, load,
+#'   load_opt, ...)} tibbles, one per available plan \code{flat} has no \code{load_opt} since
+#'   there's no shifting incentive on a flat tariff)
+#' @export
+#'
+#' @examples
+#' # sample values for standalone development/testing in the real ABM these come from a
+#' # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
+#' prices_scen <- set_prices(sD)
+#' result <- get_prospect_costs(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2020,prices_scen = prices_scen)
+#' result$costs
+#' result$profiles$tou
+get_prospect_costs <- function(kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout, prices_scen) {
+
+  stopifnot(tolower(natural_profile) %in% c("lp1", "lp3"))
+  profile <- tolower(natural_profile)
+
+  plans <- if (yeartime >= 2026.5) {
+    c("flat", "tou", "dynamic")
+  } else if (yeartime < smart_rollout) {
+    c("flat")
+  } else {
+    c("flat", "tou")
+  }
+
+  start_time <- lubridate::date_decimal(yeartime)
+  end_time   <- lubridate::date_decimal(yeartime + 1)
+
+  # one household's (datetime, price, load) for one plan's prices, one year —
+  # the exact shape get_flex() needs
+  get_plan_demand <- function(plan) {
+    prices_scen |>
+      dplyr::filter(tariff_plan == plan) |>
+      dplyr::inner_join(load_profiles_generalised |> dplyr::select(datetime, dplyr::all_of(profile)),
+                        by = c("datetime", profile)) |>
+      dplyr::filter(datetime >= start_time, datetime <= end_time) |>
+      dplyr::mutate(load = .data[[profile]] * kWh) |>
+      dplyr::select(datetime, price, load) |>
+      dplyr::arrange(datetime)
+  }
+
+  profiles <- list()
+
+  flat_demand <- get_plan_demand("flat")
+  profiles$flat <- flat_demand
+  flat_cost <- sum(flat_demand$price * flat_demand$load)
+
+  costs <- list(flat = flat_cost, tou_noflex = NA_real_, tou_flex = NA_real_,
+                det_noflex = NA_real_, det_flex = NA_real_)
+
+  if ("tou" %in% plans) {
+    tou_profile <- get_flex(get_plan_demand("tou"), phi, gamma, eta, tau)
+    profiles$tou <- tou_profile
+    costs$tou_noflex <- sum(tou_profile$price * tou_profile$load)
+    costs$tou_flex   <- sum(tou_profile$price * tou_profile$load_opt)
+  }
+
+  if ("dynamic" %in% plans) {
+    det_profile <- get_flex(get_plan_demand("dynamic"), phi, gamma, eta, tau)
+    profiles$dynamic <- det_profile
+    costs$det_noflex <- sum(det_profile$price * det_profile$load)
+    costs$det_flex   <- sum(det_profile$price * det_profile$load_opt)
+  }
+
+  list(
+    costs = tibble::as_tibble(costs),
+    profiles = profiles
+  )
+}
+
+
+
+#' get_prospect_costs_light
+#'
+#' returns flexible and inflexible costs for each tariff_plan. \cr
+#' \cr
+#' A lighter version of get_prospect_costs
+#'
+#' the flat-tariff annual cost, and the tou/dynamic annual costs both with and without the household's
+#' optimal load-shifting response \emph{plus} the underlying hourly load profiles themselves (original,
+#' tou-optimized, dynamic-optimized), not just the annual totals.
+#'
+#' Unlike \code{tariff_plan_bills()} or \code{get_annual_cost()}, this does not discard \code{get_flex()}
+#' hourly output after summing it \code{get_flex()} is run once per available plan (\code{tou},
+#' \code{dynamic}), and both the annual total \code{and} the hourly profile it produced are kept.
+#'
+#' Plan availability at \code{yeartime} follows the same rule as \code{tariff_plan_bills()}: only
+#' \code{flat} before the household's smart meter rollout, \code{flat}+\code{tou} once rolled out but
+#' before dynamic pricing is introduced (2026.5), and all three plans after. Costs for plans that aren't
+#' yet available are \code{NA}; their profiles are simply absent from the returned list.
+#'
+#' @param kWh annual householdload
+#' @param phi \eqn{\phi}
+#' @param gamma \eqn{\gamma}
+#' @param eta \eqn{\eta}
+#' @param tau \eqn{\tau}
+#' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
+#' @param yeartime current decimal time
+#' @param smart_rollout smart meter rollout time
+#' @param prices_scen price scenario
+#'
+#' @returns a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,
+#'   det_noflex, det_flex) and \code{profiles} (a named list of hourly \code{(datetime, price, load,
+#'   load_opt, ...)} tibbles, one per available plan \code{flat} has no \code{load_opt} since
+#'   there's no shifting incentive on a flat tariff)
+#' @export
+#'
+#' @examples
+#' # sample values for standalone development/testing  in the real ABM these come from a
+#' # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
+#' prices_scen <- set_prices(sD)
+#' result <- get_prospect_costs_light(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2020,prices_scen = prices_scen)
+#' result
+get_prospect_costs_light <- function(kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout, prices_scen) {
+
+  stopifnot(tolower(natural_profile) %in% c("lp1", "lp3"))
+  profile <- tolower(natural_profile)
+
+  plans <- if (yeartime >= 2026.5) {
+    c("flat", "tou", "dynamic")
+  } else if (yeartime < smart_rollout) {
+    c("flat")
+  } else {
+    c("flat", "tou")
+  }
+
+  start_time <- lubridate::date_decimal(yeartime)
+  end_time   <- lubridate::date_decimal(yeartime + 1)
+
+  # one household's (datetime, price, load) for one plan's prices, one year —
+  # the exact shape get_flex() needs
+  get_plan_demand <- function(plan) {
+    prices_scen |>
+      dplyr::filter(tariff_plan == plan) |>
+      dplyr::inner_join(load_profiles_generalised |> dplyr::select(datetime, dplyr::all_of(profile)),
+                        by = c("datetime", profile)) |>
+      dplyr::filter(datetime >= start_time, datetime <= end_time) |>
+      dplyr::mutate(load = .data[[profile]] * kWh) |>
+      dplyr::select(datetime, price, load) |>
+      dplyr::arrange(datetime)
+  }
+
+  flat_demand <- get_plan_demand("flat")
+  flat_cost <- sum(flat_demand$price * flat_demand$load)
+
+  costs <- list(flat = flat_cost, tou_noflex = NA_real_, tou_flex = NA_real_,
+                det_noflex = NA_real_, det_flex = NA_real_)
+
+  if ("tou" %in% plans) {
+    tou_profile <- get_flex(get_plan_demand("tou"), phi, gamma, eta, tau)
+    costs$tou_noflex <- sum(tou_profile$price * tou_profile$load)
+    costs$tou_flex   <- sum(tou_profile$price * tou_profile$load_opt)
+  }
+
+  if ("dynamic" %in% plans) {
+    det_profile <- get_flex(get_plan_demand("dynamic"), phi, gamma, eta, tau)
+    costs$det_noflex <- sum(det_profile$price * det_profile$load)
+    costs$det_flex   <- sum(det_profile$price * det_profile$load_opt)
+  }
+
+  tibble::as_tibble(costs)
+}
+
+
+
+#' get_ce_value
+#'
+#' Certainty-equivalent evaluation of the initial (flat -> tou/dynamic) switching decision, using
+#' the five costs from \code{get_prospect_costs()} and the household's prospect-theory parameters.
+#'
+#' For each of \code{tou} and \code{dynamic}, this treats switching as a two-outcome prospect
+#' relative to the flat-tariff reference bill: a "flex" outcome (the household achieves its optimal
+#' load-shifted cost) and a "noflex" outcome (it doesn't, and pays the unshifted cost instead), each
+#' weighted by the plan's \code{pt_certainty_flex_*} probability. The Kahneman-Tversky value function
+#' (curvature \code{pt_alpha}/\code{pt_beta}, loss aversion \code{pt_loss_aversion}) and probability
+#' weighting function (\code{pt_prob_weight_gains}/\code{pt_prob_weight_losses}) convert that into a
+#' Prospect Value, which is then inverted back into a euro-denominated Certainty Equivalent
+#' the guaranteed saving a household would consider exactly as good as the actual uncertain prospect.
+#'
+#' @param scen scenario dataframe source of the pt_* prospect-theory parameters, including
+#'   the plan-specific certainty-of-flex values (\code{pt_certainty_flex_tou}, \code{pt_certainty_flex_det})
+#' @param flat annual cost on the flat tariff
+#' @param tou_noflex annual cost on tou, unshifted load
+#' @param tou_flex annual cost on tou, optimally shifted load
+#' @param det_noflex annual cost on dynamic, unshifted load
+#' @param det_flex annual cost on dynamic, optimally shifted load
+#'
+#' @returns a list: \code{flat}, \code{certainty_tou}, \code{CE_tou}, \code{CE_bill_tou},
+#'   \code{certainty_det}, \code{CE_det}, \code{CE_bill_det}
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' costs <- get_prospect_costs(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)$costs
+#' get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex)
+get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) {
+
+  # --- load in the prospect-theory parameters (same lookup pattern as every other
+  #     scenario-driven function in the package) ---
+  alpha               <- scen |> dplyr::filter(parameter == "pt_alpha") |> dplyr::pull(value)
+  beta                <- scen |> dplyr::filter(parameter == "pt_beta") |> dplyr::pull(value)
+  loss_aversion       <- scen |> dplyr::filter(parameter == "pt_loss_aversion") |> dplyr::pull(value)
+  prob_weight_gains   <- scen |> dplyr::filter(parameter == "pt_prob_weight_gains") |> dplyr::pull(value)
+  prob_weight_losses  <- scen |> dplyr::filter(parameter == "pt_prob_weight_losses") |> dplyr::pull(value)
+  certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+
+  # --- Kahneman-Tversky value function ---
+  value_function <- function(x, alpha, beta, loss_aversion) {
+    ifelse(x >= 0,
+           x^alpha,
+           -loss_aversion * (-x)^beta)
+  }
+
+  # --- Tversky-Kahneman probability weighting function ---
+  weight_function <- function(certainty, prob_weight) {
+    certainty^prob_weight / (certainty^prob_weight + (1 - certainty)^prob_weight)^(1 / prob_weight)
+  }
+
+  # --- invert the value function: prospect value -> certainty-equivalent, in euros ---
+  ce_from_pv <- function(pv, alpha, beta, loss_aversion) {
+    ifelse(pv >= 0,
+           pv^(1/alpha),
+           -1 * (-pv/loss_aversion)^(1/beta))
+  }
+
+  # --- the full calculation for one plan, reused for tou and dynamic ---
+  evaluate_plan <- function(cost_flex, cost_noflex, certainty_flex) {
+    x_ref <- flat
+    savings_flex   <- x_ref - cost_flex
+    savings_noflex <- x_ref - cost_noflex
+
+    v_flex   <- value_function(savings_flex, alpha, beta, loss_aversion)
+    v_noflex <- value_function(savings_noflex, alpha, beta, loss_aversion)
+
+    w_flex   <- weight_function(certainty_flex, prob_weight_gains)
+    w_noflex <- weight_function(1 - certainty_flex, prob_weight_losses)
+
+    pv <- w_flex * v_flex + w_noflex * v_noflex
+    ce <- ce_from_pv(pv, alpha, beta, loss_aversion)
+
+    list(ce = ce, ce_bill = x_ref - ce)
+  }
+
+  tou <- evaluate_plan(tou_flex, tou_noflex, certainty_flex_tou)
+  det <- evaluate_plan(det_flex, det_noflex, certainty_flex_det)
+
+  list(
+    flat          = flat,
+    certainty_tou = certainty_flex_tou,
+    CE_tou        = tou$ce,
+    CE_bill_tou   = tou$ce_bill,
+    certainty_det = certainty_flex_det,
+    CE_det        = det$ce,
+    CE_bill_det   = det$ce_bill
+  )
+}
+
+
+
+#' evaluate_tariffs
+#'
+#' Agents' prospect-theory evaluation of the initial fixed to flexible switching decision. \code{evaluate_tariffs()} uses \code{get_prospect_costs()} (the five annual costs) and \code{get_ce_value()}
+#' (the certainty-equivalent of each plan), then decides to adopt whichever of \code{tou}
+#' \code{dynamic} has the most favourable certainty-equivalent gain. If there is no gain, the agents stay on
+#' \code{flat}. This is the self-contained unit meant to be called once per household from
+#' \code{update_agents()} in place of the classic savings/social/theta decision.
+#'
+#' @param scen scenario dataframe
+#' @param kWh annual load
+#' @param phi \eqn{\phi}
+#' @param gamma \eqn{\gamma}
+#' @param eta \eqn{\eta}
+#' @param tau \eqn{\tau}
+#' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
+#' @param yeartime current decimal time
+#' @param smart_rollout smart meter rollout time
+#' @param prices_scen price scenario
+#'
+#' @returns a list: \\code{costs} (the five annual costs), \\code{ce} (the full \\code{get_ce_value()}
+#'   output), and \\code{decision} (\\code{"flat"}, \\code{"tou"}, or \\code{"dynamic"})
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' evaluate_tariffs(sD,kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2025,prices_scen = prices_scen)
+evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout, prices_scen) {
+
+  costs <- get_prospect_costs_light(kWh, phi, gamma, eta, tau, natural_profile, yeartime, smart_rollout, prices_scen)
+
+  ce <- get_ce_value(costs$flat, costs$tou_noflex, costs$tou_flex,
+                     costs$det_noflex, costs$det_flex, scen = scen)
+
+  # adopt whichever of tou/dynamic has the higher CE, provided it's positive;
+  # if neither plan is available yet (both NA) or neither clears zero, stay on flat
+  candidates <- c(tou = ce$CE_tou, dynamic = ce$CE_det)
+  if (all(is.na(candidates))) {
+    decision <- "flat"
+  } else {
+    best <- names(candidates)[which.max(candidates)]
+    decision <- if (max(candidates, na.rm = TRUE) > 0) best else "flat"
+  }
+
+  list(
+    costs = costs,
+    ce = ce,
+    decision = decision
+  )
 }
 

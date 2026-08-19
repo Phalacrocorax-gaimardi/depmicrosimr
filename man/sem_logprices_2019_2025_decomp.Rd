@@ -7,14 +7,14 @@
 \format{
 A data frame with 61368 rows and 8 variables:
 \describe{
-  \item{\code{datetime}}{double COLUMN_DESCRIPTION}
-  \item{\code{logprice}}{double COLUMN_DESCRIPTION}
-  \item{\code{trend}}{double COLUMN_DESCRIPTION}
-  \item{\code{season_day}}{double COLUMN_DESCRIPTION}
-  \item{\code{season_week}}{double COLUMN_DESCRIPTION}
-  \item{\code{season_year}}{double COLUMN_DESCRIPTION}
-  \item{\code{remainder}}{double COLUMN_DESCRIPTION}
-  \item{\code{annual_leakage}}{double COLUMN_DESCRIPTION}
+\item{\code{datetime}}{double COLUMN_DESCRIPTION}
+\item{\code{logprice}}{double COLUMN_DESCRIPTION}
+\item{\code{trend}}{double COLUMN_DESCRIPTION}
+\item{\code{season_day}}{double COLUMN_DESCRIPTION}
+\item{\code{season_week}}{double COLUMN_DESCRIPTION}
+\item{\code{season_year}}{double COLUMN_DESCRIPTION}
+\item{\code{remainder}}{double COLUMN_DESCRIPTION}
+\item{\code{annual_leakage}}{double COLUMN_DESCRIPTION}
 }
 }
 \usage{

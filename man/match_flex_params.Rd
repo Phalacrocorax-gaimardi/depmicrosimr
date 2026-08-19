@@ -16,7 +16,7 @@ single row dataframe
 }
 \description{
 This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the 1-hourly load-shifting index
-quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
+quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30\%.\cr
 \cr
 The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
 flex_scores.\cr

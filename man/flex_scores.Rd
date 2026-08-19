@@ -7,19 +7,19 @@
 \format{
 A data frame with 540 rows and 13 variables:
 \describe{
-  \item{\code{tariff_plan}}{character COLUMN_DESCRIPTION}
-  \item{\code{profile}}{profile used}
-  \item{\code{phi}}{double flexible fraction}
-  \item{\code{gamma}}{double cost penality }
-  \item{\code{eta}}{double COLUMN_DESCRIPTION}
-  \item{\code{tau}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_1hr}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_3hr}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_6hr}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_12hr}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_24hr}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_day}}{double COLUMN_DESCRIPTION}
-  \item{\code{flex_week}}{double COLUMN_DESCRIPTION}
+\item{\code{tariff_plan}}{character COLUMN_DESCRIPTION}
+\item{\code{profile}}{profile used}
+\item{\code{phi}}{double flexible fraction}
+\item{\code{gamma}}{double cost penality }
+\item{\code{eta}}{double COLUMN_DESCRIPTION}
+\item{\code{tau}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_1hr}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_3hr}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_6hr}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_12hr}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_24hr}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_day}}{double COLUMN_DESCRIPTION}
+\item{\code{flex_week}}{double COLUMN_DESCRIPTION}
 }
 }
 \usage{

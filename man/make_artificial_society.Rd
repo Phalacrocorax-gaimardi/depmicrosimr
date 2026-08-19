@@ -17,8 +17,8 @@ make_artificial_society(society = society, homophily = homophily, nu = 4.5)
 a tidygraph object
 }
 \description{
-Creates a homophilous social influence network based on demographic attributes contained in *dep_society* and
-weights in *homophily*.
+Creates a homophilous social influence network based on demographic attributes contained in \emph{dep_society} and
+weights in \emph{homophily}.
 }
 \examples{
 make_artificial_society(dep_society,homophily,nu=4.5)

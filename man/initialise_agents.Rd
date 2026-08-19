@@ -38,14 +38,14 @@ ToU pricing. This flexibility score index lies between 0 & 1.
 \cr
 4-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
 a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}) and the load mean reversion timescale (\eqn{\tau}).The current version fixes
-adjusts \eqn{\gamma} and \eqn{\eta} so that the *aggregate* flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
+adjusts \eqn{\gamma} and \eqn{\eta} so that the \emph{aggregate} flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
 in flexibility is described by \eqn{\phi-\tau} parameter pair. In general the aggregrate flexibilty is lower than the weighted sum of household flexibilities
 \deqn{f_{aggregate} < sum_i^N w_i f_i} weighted by the individual household annual demand.
 }
 \details{
 \cr
 \cr
-Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
+Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12\% of households.
 \cr
 \cr
 The nework input is used to determine the social degree of each agent.

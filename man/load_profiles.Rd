@@ -7,12 +7,12 @@
 \format{
 A data frame with 8760 rows and 6 variables:
 \describe{
-  \item{\code{datetime}}{double datetime UTC (dttm)}
-  \item{\code{day_note}}{character note on holidays etc}
-  \item{\code{lp1}}{double Load Profile 1: Urban Domestic 24 Hour}
-  \item{\code{lp2}}{double Load Profile 2: Urban Domestic Night Saver}
-  \item{\code{lp3}}{double Load Profile 3: Rural Domestic 24 Hour}
-  \item{\code{lp4}}{double Load Profile 4: Rural Domestic Night Saver}
+\item{\code{datetime}}{double datetime UTC (dttm)}
+\item{\code{day_note}}{character note on holidays etc}
+\item{\code{lp1}}{double Load Profile 1: Urban Domestic 24 Hour}
+\item{\code{lp2}}{double Load Profile 2: Urban Domestic Night Saver}
+\item{\code{lp3}}{double Load Profile 3: Rural Domestic 24 Hour}
+\item{\code{lp4}}{double Load Profile 4: Rural Domestic Night Saver}
 }
 }
 \source{

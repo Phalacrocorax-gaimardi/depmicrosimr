@@ -12,7 +12,7 @@ set_prices(scen, cru_cap = TRUE)
 \item{cru_cap}{Boolean, defaults to TRUE}
 }
 \description{
-set_prices() is a *retail* electricity tariff pricing model based on wholesale prices and network charges. The purpose of
+set_prices() is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges. The purpose of
 this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
 prices with reasnable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections would not be meaningful because they would depend
 on specific assumptions. This is equivalent to the assumption that network supplier set their prices so that the average price paid by

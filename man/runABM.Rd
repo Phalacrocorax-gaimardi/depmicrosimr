@@ -9,8 +9,9 @@ runABM(
   Nrun = 1,
   simulation_end = 2030,
   resample_society = F,
+  behavioural_model = "prospect",
   n_unused_cores = 2,
-  use_parallel = F,
+  use_parallel = T,
   ignore_social = F,
   quiet = TRUE
 )
@@ -23,6 +24,8 @@ runABM(
 \item{simulation_end}{the final year of simulation of early termination is required}
 
 \item{resample_society}{if TRUE resample hp_society_oo with replacement to capture additional variability}
+
+\item{behavioural_model}{"classic" or "prospect" (default)}
 
 \item{n_unused_cores}{number of cores left unused in parallel/foreach. Recommended values 2 or 1.}
 

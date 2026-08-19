@@ -7,9 +7,9 @@
 \format{
 A data frame with 52 rows and 3 variables:
 \describe{
-  \item{\code{county}}{character county}
-  \item{\code{area}}{character urban or rural}
-  \item{\code{rollout}}{double decimal time}
+\item{\code{county}}{character county}
+\item{\code{area}}{character urban or rural}
+\item{\code{rollout}}{double decimal time}
 }
 }
 \usage{

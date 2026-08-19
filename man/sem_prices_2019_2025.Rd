@@ -7,8 +7,8 @@
 \format{
 A data frame with 61273 rows and 2 variables:
 \describe{
-  \item{\code{datetime}}{double dttm date times}
-  \item{\code{price}}{double SEM price in euros per MWh}
+\item{\code{datetime}}{double dttm date times}
+\item{\code{price}}{double SEM price in euros per MWh}
 }
 }
 \usage{

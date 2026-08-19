@@ -124,10 +124,11 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 
 #' update_agents
 #'
-#' micro-simulation time-step updater
-#'
-#' The workhorse ABM function.Within a scenario, does a single month update of the agent characteristics. A random sample of agents evaluates their economic and social
+#' micro-simulation time-step updater\cr
+#'\cr
+#' The workhorse ABM function.Within a scenario, does a single step (bi-monthly) update of the agent characteristics. A random sample of agents evaluates their economic and social
 #' utilities. Agents evaluate the optimal electricity tariff plan. This includes a dynamic tariff.
+#' \cr
 #'
 #'
 #' @param scen  scenario dataframe
@@ -136,6 +137,8 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' @param prices_scen tariff plan price assumptions
 #' @param social_network artificial social network
 #' @param ignore_social option to ignore social effects. Default is FALSE.
+#' @param behavioural_model "prospect" (default) or "classic"
+#' @param ignore_theta defaults to TRUE
 #' @param quiet TRUE to suppress messages
 #'
 #' @return updated agent dataframe
@@ -146,10 +149,10 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
-#' #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
+#' agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
-update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,quiet=TRUE){
+update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
   #
   #params at yeartime
   params <- scenario_params(scen,yeartime)
@@ -159,7 +162,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #theta <- dplyr::filter(empirical_u,question_code=="theta")$du_average
   a_s <- agents_in
   n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan=="dynamic"))[1]
-  print(paste("initial number of dynamics", n_dynamic))
+  print(paste("initial number of dynamic tariff plans", n_dynamic))
   #social influence (homogeneous)
   #du_social <- params$nu.*n_dynamic/dim(a_s)[1]
   #assume that any old day/night custeomers are converted to day/night/peak rate when smart meters are installed.
@@ -169,10 +172,14 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #random subset of potential switchers
   b_s <- dplyr::slice_sample(a_s,n=roundr(dim(a_s)[1]*params$p.))
   #note ellipsis to handle uncalled columns
+  b_s$current_plan <- b_s$tariff_plan
+  #
   tariff_plan_bills_env <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,...) {
 
     tariff_plan_bills(kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,prices_scen)
   }
+
+  if (behavioural_model== "classic") {
 
   b_s <- b_s %>% dplyr::select(-annual_bill,-tariff_plan)
 
@@ -202,6 +209,53 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   b_s_2 <- b_s_2 %>% dplyr::mutate(tariff_plan = dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_plan,next_plan),
                                    annual_bill=dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_bill,next_bill))#barrier
   b_s_3 <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-du_social,-savings)
+
+  } else {
+
+    # decision_rule == "prospect"
+    # only flat/tou agents are evaluated this pass -- dynamic agents are left untouched
+    # IS THIS REALISTIC?
+    # (full retrospective re-evaluation for tou/dynamic households is the deferred piece)
+    to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
+    unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
+
+    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,...) {
+      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,prices_scen)
+      # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
+      # flat is the deferred retrospective piece, not decided here)
+      new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
+      new_bill <- switch(new_plan,
+                         flat    = result$costs$flat,
+                         tou     = result$costs$tou_flex,
+                         dynamic = result$costs$det_flex)
+      tibble::tibble(tariff_plan=new_plan, annual_bill=new_bill,
+                     CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
+    }
+
+    if (nrow(to_evaluate) > 0) {
+      to_evaluate <- to_evaluate %>%
+        # CHANGED (bug fix): drop any CE_tou/CE_det carried over from a previous timestep's
+        # evaluation before this -- tidyr::unnest() errors if the list-column being unnested
+        # (eval_data, which also has CE_tou/CE_det) shares names with existing columns.
+        # any_of() (not all_of()) is deliberate: these columns won't exist yet on the very
+        # first timestep any agent is ever evaluated, and any_of() doesn't error on that.
+        dplyr::select(-annual_bill,-tariff_plan,-dplyr::any_of(c("CE_tou","CE_det"))) %>%
+        dplyr::mutate(eval_data = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
+        tidyr::unnest(eval_data) %>%
+        dplyr::select(-current_plan)
+    } else {
+      to_evaluate$CE_tou <- NA_real_
+      to_evaluate$CE_det <- NA_real_
+      to_evaluate <- to_evaluate %>% dplyr::select(-current_plan)
+    }
+
+    unchanged$CE_tou <- NA_real_
+    unchanged$CE_det <- NA_real_
+    unchanged <- unchanged %>% dplyr::select(-current_plan)
+
+    b_s_3 <- dplyr::bind_rows(to_evaluate, unchanged)
+  }
+
 
   b_s_3$profile <- "computed"
   #update agents with switchers
@@ -243,6 +297,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @param n_unused_cores number of cores left unused in parallel/foreach. Recommended values 2 or 1.
 #' @param use_parallel if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.
 #' @param ignore_social if TRUE ignore social network effects. Default is FALSE
+#' @param behavioural_model "classic" or "prospect" (default)
 #' @param quiet if TRUE messaging is reduced
 #'
 #' @return a three component list - simulation output, scenario setup, meta-parameters
@@ -250,7 +305,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_cores=2, use_parallel=F,ignore_social=F, quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="prospect",n_unused_cores=2, use_parallel=T,ignore_social=F, quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
@@ -263,7 +318,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
   #single worker (abm run idex j)
-  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,quiet){
+  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,quiet){
 
     print(paste("Generating price simulation for run",j,"...."))
     prices_scen <- set_prices(scen)
@@ -288,7 +343,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
       #
       #yeartime <- year_zero+(t-1)
       yeartime <- year_zero+(t-1)/6
-      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,quiet) #static socal network, everything else static
+      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,behavioural_model,quiet) #static socal network, everything else static
       #agent_ts[[t]] <- tibble::tibble(t=t)
     }
 
@@ -310,6 +365,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
                                  year_zero = year_zero,
                                  Nt = Nt,
                                  resample_society = resample_society,
+                                 behavioural_model=behavioural_model,
                                  ignore_social = ignore_social,
                                  quiet = quiet)
       parallel::stopCluster(cl)
@@ -323,6 +379,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
                                 resample_society = resample_society,
                                 ignore_social = ignore_social,
                                 quiet = quiet,
+                                behavioural_model=behavioural_model,
                                 mc.cores=number_of_cores)
     }
 
@@ -333,12 +390,13 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,n_unused_
                                     Nt = Nt,
                                     resample_society = resample_society,
                                     ignore_social = ignore_social,
+                                    behavioural_model=behavioural_model,
                                     quiet = quiet)
 
 
     closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta."),value=c(Nrun,simulation_end,p.,nu.,theta.))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta.","model"),value=c(Nrun,simulation_end,p.,nu.,theta.,behavioural_model))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)

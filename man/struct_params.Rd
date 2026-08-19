@@ -7,10 +7,10 @@
 \format{
 A data frame with 1225 rows and 4 variables:
 \describe{
-  \item{\code{serial}}{double HH serial ID}
-  \item{\code{inertia}}{double inertia parameter}
-  \item{\code{proactive}}{double COLUMN_DESCRIPTION}
-  \item{\code{flexibility}}{double COLUMN_DESCRIPTION}
+\item{\code{serial}}{double HH serial ID}
+\item{\code{inertia}}{double inertia parameter}
+\item{\code{proactive}}{double COLUMN_DESCRIPTION}
+\item{\code{flexibility}}{double COLUMN_DESCRIPTION}
 }
 }
 \usage{

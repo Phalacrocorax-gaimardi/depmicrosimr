@@ -7,8 +7,8 @@
 \format{
 A \code{depmix.fitted} object with 3 hidden states.
 \describe{
-  \item{transition}{Transition probabilities between states}
-  \item{response}{Response models for each state}
+\item{transition}{Transition probabilities between states}
+\item{response}{Response models for each state}
 }
 }
 \usage{

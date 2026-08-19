@@ -11,6 +11,8 @@ update_agents(
   prices_scen,
   social_network,
   ignore_social = F,
+  behavioural_model = "prospect",
+  ignore_theta = TRUE,
   quiet = TRUE
 )
 }
@@ -27,17 +29,21 @@ update_agents(
 
 \item{ignore_social}{option to ignore social effects. Default is FALSE.}
 
+\item{behavioural_model}{"prospect" (default) or "classic"}
+
+\item{ignore_theta}{defaults to TRUE}
+
 \item{quiet}{TRUE to suppress messages}
 }
 \value{
 updated agent dataframe
 }
 \description{
-micro-simulation time-step updater
-}
-\details{
-The workhorse ABM function.Within a scenario, does a single month update of the agent characteristics. A random sample of agents evaluates their economic and social
+micro-simulation time-step updater\cr
+\cr
+The workhorse ABM function.Within a scenario, does a single step (bi-monthly) update of the agent characteristics. A random sample of agents evaluates their economic and social
 utilities. Agents evaluate the optimal electricity tariff plan. This includes a dynamic tariff.
+\cr
 }
 \examples{
 
@@ -45,6 +51,6 @@ prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 
-#agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,quiet=FALSE)
+agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
 #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 }

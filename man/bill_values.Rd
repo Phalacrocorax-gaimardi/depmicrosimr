@@ -7,8 +7,8 @@
 \format{
 A data frame with 13 rows and 2 variables:
 \describe{
-  \item{\code{response_code}}{double response code}
-  \item{\code{bill}}{character euros}
+\item{\code{response_code}}{double response code}
+\item{\code{bill}}{character euros}
 }
 }
 \usage{
