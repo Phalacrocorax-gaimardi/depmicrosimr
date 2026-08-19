@@ -651,22 +651,14 @@ flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.4,20)
-#' match_flex_params(60,score_cube)
+#' score_cube <- flex_score_cube(0.2,5)
+#' match_flex_params(40,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
   #
-  res <- if(x < score_cube %>% dplyr::slice_max(flex_score) %>% dplyr::pull(flex_score)){
-  tol <- 0.1
-  #coordinates of the contour line at height x
-  xmax <- max(score_cube$flex_score)
-  xmin <- min(score_cube$flex_score)
-  x <- max(xmin,x)
-  x <- min(x,xmax)
-  matching_triples <- score_cube %>% dplyr::filter(abs(flex_score - x) <= tol) %>% dplyr::select(phi,tau)
-  matching_triples %>% dplyr::slice_sample()}
-  else {tibble::tibble(phi=NA,tau=NA)}
-  return(res)
+
+  score_cube %>% dplyr::slice_min(abs(x-flex_score),n=2) %>% dplyr::slice_sample(n=1)
+
 
 }
 

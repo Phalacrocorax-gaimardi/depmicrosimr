@@ -12,8 +12,6 @@ sem %>% ggplot(aes(datetime,price,colour=regime))+geom_line()+theme_minimal()
 
 prices_scen <- set_prices(sD)
 
-
-
 prices_scen %>% filter(year(datetime)==2030,yday(datetime)==150) %>% ggplot(aes(datetime,price,colour=tariff_plan))+geom_line() + geom_point()
 #daily dynmaic price variations
 pp <- prices_scen %>% filter(tariff_plan != "flat") %>% pivot_wider(names_from=tariff_plan,values_from=price)
@@ -298,7 +296,7 @@ get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_sc
 
 flex_scores_new <- tibble()
 #flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
-for(eta in 5)
+for(eta in 0.6)
  for(tariff_plan in c("tou","dynamic"))
   for(phi in seq(0,0.8,by=0.2))
    for(gamma in c(1,10,20,50,100))
@@ -308,7 +306,8 @@ for(eta in 5)
           flex_scores_new <- flex_scores_new %>% bind_rows(get_flex_scores(sD,2026,8760,tariff_plan,phi,gamma,eta,tau,"exp","LP1",prices_scen))
         }
 
-flex_scores <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+#flex_scores <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+flex_scores <- flex_scores %>% filter(eta != 0.6)
 flex_scores <- flex_scores %>% bind_rows(flex_scores_new)
 #
 #write_csv(flex_scores,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
@@ -606,7 +605,7 @@ df_err <- tibble()
 for(eta in flex_scores$eta %>% unique())
   for(gamma in flex_scores %>% filter(gamma <= 5) %>% pull(gamma) %>% unique()){
     print(paste(gamma,eta))
-    df <- tibble(eta=eta,gamma=gamma) %>% mutate(err=profile(eta,gamma,10))
+    df <- tibble(eta=eta,gamma=gamma) %>% mutate(err=profiler(eta,gamma,10))
     print(df)
     write_csv(df, "~/Policy/CAMG/Dynamic Pricing/df_err.csv",append=T)
     df_err <- df_err %>% bind_rows(df)
@@ -619,7 +618,7 @@ demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::sele
 demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
 demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
 
-test <- get_flex(demand,0.5,30,0.5,24)
+test <- get_flex(demand,1,30,0.5,24)
 test %>% filter(week(datetime)==10) %>% ggplot() + geom_line(aes(datetime,load),linetype="dotted") + geom_line(aes(datetime,load_opt))
 
 test0 <- test %>% group_by(hour=hour(datetime)) %>% summarise(load=mean(load),load_opt=mean(load_opt), fload=mean(fload))
