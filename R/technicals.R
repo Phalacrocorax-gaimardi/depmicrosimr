@@ -588,45 +588,45 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 
 #' flex_score_cube
 #'
-#' utility function used by match_flex_params(). fex_score_cube() returns a table of flexibilty scores for a range \eqn{\phi, \gamma, \tau} triples.
-#' It is based on the 3-hour flexibility score.
-#' @param eta_targ eta parameter assumption
-#' @param gamma_targ gamm parameter assumption
+#' utility function used by \code{match_flex_params()}. \code{flex_score_cube()} returns a table of flexibilty scores for a range \eqn{\gamma,\tau} pairs,
+#' given input values for \eqn{\eta,\phi}. Flexibility is on a 1-hour measure.
+#' @param eta_targ \eqn{eta} parameter assumption
+#' @param phi_targ \eqn{phi} parameter assumption
 #' @returns
 #' @export
 #'
 #' @examples
-#' flex_score_cube(0.8,10) %>% dplyr::slice_max(flex_score)
-#' flex_scores %>% dplyr::filter(eta==0.4,gamma==1)  %>% dplyr::slice_max(flex_1hr)
-flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
+#' flex_score_cube(0.4,0.5) %>% dplyr::slice_max(flex_score)
+#' flex_scores %>% dplyr::filter(eta==0.4,phi==0.5)  %>% dplyr::slice_max(flex_1hr)
+flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 
   train_data <- flex_scores %>%
     dplyr::filter(
       tariff_plan == "tou",
       eta == eta_targ,
-      gamma == gamma_targ
+      phi == phi_targ
     )
 
   #pivot
   grid_wide <- train_data %>%
-    dplyr::select(phi, tau, flex_1hr) %>%
-    dplyr::arrange(tau, phi) %>%
-    tidyr::pivot_wider(names_from = phi, values_from = flex_1hr)
+    dplyr::select(gamma, tau, flex_1hr) %>%
+    dplyr::arrange(gamma,tau) %>%
+    tidyr::pivot_wider(names_from = gamma, values_from = flex_1hr)
 
   orig_tau <- grid_wide$tau                           # length(y) = nrow(Z)
-  orig_phi <- as.numeric(colnames(grid_wide)[-1])     # length(x) = ncol(Z)
+  orig_gamma <- as.numeric(colnames(grid_wide)[-1])     # length(x) = ncol(Z)
   Z_mat    <- as.matrix(grid_wide[, -1])              # dim: length(tau) x length(phi)
 
   # dense grid
-  new_phi <- seq(min(flex_scores$phi), max(flex_scores$phi), length.out = 100)
+  new_gamma <- seq(min(flex_scores$gamma), max(flex_scores$gamma), length.out = 100)
   new_tau <- seq(min(flex_scores$tau), max(flex_scores$tau), length.out = 100)
-  dense_grid <- tidyr::expand_grid(phi = new_phi, tau = new_tau)
+  dense_grid <- tidyr::expand_grid(gamma = new_gamma, tau = new_tau)
 
   dense_grid$flex_score <- pracma::interp2(
-    x = orig_phi,
+    x = orig_gamma,
     y = orig_tau,
     Z = Z_mat,
-    xp = dense_grid$phi,
+    xp = dense_grid$gamma,
     yp = dense_grid$tau,
     method = "linear"
   )
@@ -636,7 +636,7 @@ flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
 
 #' match_flex_params
 #'
-#' This function returns a flexibility \eqn{tau,phi} parameter couple given a value for the 1-hourly load-shifting index
+#' This function returns a flexibility \eqn{gamma,tau} parameter couple given a value for the 1-hourly load-shifting index
 #' quantity x. Inflexible agents have zero loadshift MAE while highly flexible agents have loadshifting of about 30%.\cr
 #' \cr
 #' The utility function flex_score_cube() must be called before using this function (see examples). This recasts the data in
@@ -651,14 +651,12 @@ flex_score_cube <- function(eta_targ = 0.6, gamma_targ = 10) {
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.2,5)
+#' score_cube <- flex_score_cube(0.2,0.5)
 #' match_flex_params(40,score_cube)
 #'
 match_flex_params <- function(x,score_cube){
   #
-
   score_cube %>% dplyr::slice_min(abs(x-flex_score),n=2) %>% dplyr::slice_sample(n=1)
-
 
 }
 

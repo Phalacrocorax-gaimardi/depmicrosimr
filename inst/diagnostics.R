@@ -36,7 +36,7 @@ agents_in <- initialise_agents(sD,2019,prices_scen,social)
 
 scen <- sD
 scen <- scen %>% mutate(value=replace(value,parameter=="theta.",0.))
-abm <- runABM(scen,1,2029,use_parallel = T)
+abm <- runABM(scen,4,2029,use_parallel = T)
 
 abm_neutral <- read_rds("~/Policy/CAMG/Dynamic Pricing/ABM_outputs/neutral.RData")
 #write_rds(abm_theta_0.2,"~/Policy/CAMG/Dynamic Pricing/ABM_outputs/abm_theta_0.0.RData")
@@ -598,7 +598,7 @@ profiler <- function(eta,gamma,N=10){
 #profiler(0.4,20,100) 0.1676211
 #profiler(0.4,50,100)  0.1647912
 #profiler(0.4,100,100) 0.2152141
-profiler(0.6,2,10)
+profiler(0.0,0,10)
 
 flex_scores <- flex_scores %>% arrange(phi,gamma,eta,tau)
 df_err <- tibble()
@@ -648,7 +648,7 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
 
 }
 
-agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0.4,gamma=2)
+agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0,gamma=0)
 
 agents_in <- agents_init %>% filter(natural_profile=="lp1")
 n_agents <- dim(agents_in)[1]

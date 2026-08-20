@@ -30,7 +30,7 @@
 #' @param prices_scen tariff prices dataframe
 #' @param social_network social network
 #' @param eta eta flex parameter value
-#' @param gamma gamma parameter choice
+#' @param phi \eqn{\phi} parameter choice
 #'
 #'
 #' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
@@ -38,11 +38,11 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network,0.4,1)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,gamma=1){
+#' initialise_agents(sD,2019,prices_scen,social_network,0.6,0.5)
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.6,phi=0.5){
 
   #agents_in has a minimal set of survey data
-  stopifnot(eta %in% flex_scores$eta & gamma %in% flex_scores$gamma)
+  stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
 
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
   #
@@ -72,7 +72,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #rollout year
   #add flex params
   agents_in$eta <- eta
-  agents_in$gamma <- gamma
+  agents_in$phi <- phi
   #generate "flexibility scores" (hourly MAD load-shifting index) range from min_flex to max_flex%
 
   flex_scale <- scen %>% dplyr::filter(parameter=="flex_scale.") %>% dplyr::pull(value)
@@ -83,13 +83,13 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(70,flex_scale*exp(flex_sigma*flexibility))) #
 
   #check weighted mean flexibility
-  weighted_sum <- agents_in %>% dplyr::mutate(w= 1/kWh/sum(1/kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  print(paste("weighted mean sum of household flexibilities", weighted_sum,"% vs lp1-lp2 flexibility 14.4%"))
+  weighted_sum <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
+  print(paste("weighted mean sum of household flexibilities", round(weighted_sum,1),"% vs lp1-lp2 flexibility 14.4%"))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
   #sample flexible parameter values based on flex_score
-  score_cube <- flex_score_cube(eta,gamma)
+  score_cube <- flex_score_cube(eta,phi)
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score,score_cube)) %>% dplyr::ungroup()
   #rescale eta and gamma parameters according to mean hourly demand
   # reduced effect of quadratic
