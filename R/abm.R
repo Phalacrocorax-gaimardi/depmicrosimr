@@ -149,7 +149,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
-#' agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
+#' #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
@@ -157,9 +157,6 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #params at yeartime
   params <- scenario_params(scen,yeartime)
   #
-  #empirical_u <- hp_empirical_utils %>% dplyr::filter(calibration_run==cal_run) %>% dplyr::select(-calibration_run)
-  #social utility - knowing others who have installed an heat pump
-  #theta <- dplyr::filter(empirical_u,question_code=="theta")$du_average
   a_s <- agents_in
   n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan=="dynamic"))[1]
   print(paste("initial number of dynamic tariff plans", n_dynamic))
@@ -297,7 +294,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @param n_unused_cores number of cores left unused in parallel/foreach. Recommended values 2 or 1.
 #' @param use_parallel if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.
 #' @param ignore_social if TRUE ignore social network effects. Default is FALSE
-#' @param behavioural_model "classic" or "prospect" (default)
+#' @param behavioural_model choose "classic" or "prospect" (default)
 #' @param quiet if TRUE messaging is reduced
 #'
 #' @return a three component list - simulation output, scenario setup, meta-parameters

@@ -25,7 +25,7 @@ runABM(
 
 \item{resample_society}{if TRUE resample hp_society_oo with replacement to capture additional variability}
 
-\item{behavioural_model}{"classic" or "prospect" (default)}
+\item{behavioural_model}{choose "classic" or "prospect" (default)}
 
 \item{n_unused_cores}{number of cores left unused in parallel/foreach. Recommended values 2 or 1.}
 

@@ -70,17 +70,21 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
   stopifnot(kernel %in% c("exp","gauss","cauchy","matern"))
 
   #fully inflexible case os pathological for osqp
-  if(phi == 1){
-    demand$fload=0
-    demand$x =0
-    demand$load_opt=demand$load
-    demand$baseload=demand$load
+  # Pre-validate phi
+  stopifnot(length(phi) == 1, !is.na(phi))
+
+  # Safely check for phi near or above 1
+  if (dplyr::near(phi, 1) || phi > 1) {
+    demand$fload <- 0
+    demand$x <- 0
+    demand$load_opt <- demand$load
+    demand$baseload <- demand$load
     return(demand)
   }
 
   P_max <- sD %>% dplyr::filter(parameter=="mic") %>% dplyr::pull(value)
   demand <- demand %>% dplyr::arrange(datetime) %>% dplyr::mutate(hour=lubridate::hour(datetime))
-  demand <- demand %>% dplyr::inner_join(diurnal_inflex)
+  demand <- demand %>% dplyr::inner_join(diurnal_inflex,by="hour")
   T_total <- nrow(demand)
   #define the flexible load, including time of day modulation
   #transformation ensures that phi_t -> 1 when phi -> 1 iresepctive of f
