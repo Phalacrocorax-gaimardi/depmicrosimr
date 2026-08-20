@@ -733,6 +733,8 @@ get_prospect_costs_light <- function(kWh, phi, gamma, eta, tau, natural_profile 
 #' @param tou_flex annual cost on tou, optimally shifted load
 #' @param det_noflex annual cost on dynamic, unshifted load
 #' @param det_flex annual cost on dynamic, optimally shifted load
+#' @param flex_certainty_tou flexibility outcome confidence tou
+#' @param flex_certainty_det  flexibility outcome confidence det
 #'
 #' @returns a list: \code{flat}, \code{certainty_tou}, \code{CE_tou}, \code{CE_bill_tou},
 #'   \code{certainty_det}, \code{CE_det}, \code{CE_bill_det}
@@ -740,9 +742,9 @@ get_prospect_costs_light <- function(kWh, phi, gamma, eta, tau, natural_profile 
 #'
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' costs <- get_prospect_costs(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)$costs
+#' costs <- get_prospect_costs_light(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)
 #' get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex)
-get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) {
+get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,flex_certainty_tou=0.8,flex_certainty_det=0.7) {
 
   # --- load in the prospect-theory parameters (same lookup pattern as every other
   #     scenario-driven function in the package) ---
@@ -751,8 +753,8 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) 
   loss_aversion       <- scen |> dplyr::filter(parameter == "pt_loss_aversion") |> dplyr::pull(value)
   prob_weight_gains   <- scen |> dplyr::filter(parameter == "pt_prob_weight_gains") |> dplyr::pull(value)
   prob_weight_losses  <- scen |> dplyr::filter(parameter == "pt_prob_weight_losses") |> dplyr::pull(value)
-  certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
-  certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+  #certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  #certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
 
   # --- Kahneman-Tversky value function ---
   value_function <- function(x, alpha, beta, loss_aversion) {
@@ -791,15 +793,15 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) 
     list(ce = ce, ce_bill = x_ref - ce)
   }
 
-  tou <- evaluate_plan(tou_flex, tou_noflex, certainty_flex_tou)
-  det <- evaluate_plan(det_flex, det_noflex, certainty_flex_det)
+  tou <- evaluate_plan(tou_flex, tou_noflex, flex_certainty_tou)
+  det <- evaluate_plan(det_flex, det_noflex, flex_certainty_det)
 
   list(
     flat          = flat,
-    certainty_tou = certainty_flex_tou,
+    certainty_tou = flex_certainty_tou,
     CE_tou        = tou$ce,
     CE_bill_tou   = tou$ce_bill,
-    certainty_det = certainty_flex_det,
+    certainty_det = flex_certainty_det,
     CE_det        = det$ce,
     CE_bill_det   = det$ce_bill
   )
@@ -824,6 +826,8 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) 
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
 #' @param yeartime current decimal time
 #' @param smart_rollout smart meter rollout time
+#' @param flex_certainty_tou confidence in tou flexibility
+#' @param flex_certainty_det confidence in det flexibility
 #' @param prices_scen price scenario
 #'
 #' @returns a list: \\code{costs} (the five annual costs), \\code{ce} (the full \\code{get_ce_value()}
@@ -833,12 +837,15 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex) 
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' evaluate_tariffs(sD,kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2025,prices_scen = prices_scen)
-evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout, prices_scen) {
+evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout,flex_certainty_tou=0.8,flex_certainty_det=0.7, prices_scen) {
 
   costs <- get_prospect_costs_light(kWh, phi, gamma, eta, tau, natural_profile, yeartime, smart_rollout, prices_scen)
 
-  ce <- get_ce_value(costs$flat, costs$tou_noflex, costs$tou_flex,
-                     costs$det_noflex, costs$det_flex, scen = scen)
+  #certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  #certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+
+  ce <- get_ce_value(scen = scen,costs$flat, costs$tou_noflex, costs$tou_flex,
+                     costs$det_noflex, costs$det_flex,flex_certainty_tou,flex_certainty_det)
 
   # adopt whichever of tou/dynamic has the higher CE, provided it's positive;
   # if neither plan is available yet (both NA) or neither clears zero, stay on flat

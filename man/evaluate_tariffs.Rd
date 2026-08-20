@@ -14,6 +14,8 @@ evaluate_tariffs(
   natural_profile = "LP1",
   yeartime,
   smart_rollout,
+  flex_certainty_tou = 0.8,
+  flex_certainty_det = 0.7,
   prices_scen
 )
 }
@@ -35,6 +37,10 @@ evaluate_tariffs(
 \item{yeartime}{current decimal time}
 
 \item{smart_rollout}{smart meter rollout time}
+
+\item{flex_certainty_tou}{confidence in tou flexibility}
+
+\item{flex_certainty_det}{confidence in det flexibility}
 
 \item{prices_scen}{price scenario}
 }

@@ -83,8 +83,8 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(70,flex_scale*exp(flex_sigma*flexibility))) #
 
   #check weighted mean flexibility
-  weighted_sum <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  print(paste("weighted mean sum of household flexibilities", round(weighted_sum,1),"% vs lp1-lp2 flexibility 14.4%"))
+  weighted_mean <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
+  print(paste("weighted mean of household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
@@ -216,8 +216,12 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
     to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
     unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
 
-    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,...) {
-      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,prices_scen)
+    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,degree,q_dyn,...) {
+      c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+      c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+      #adjust ce_det according to share of associates who have adopted dynamic
+      c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect
+      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,c_tou,c_det,prices_scen)
       # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
       # flat is the deferred retrospective piece, not decided here)
       new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision

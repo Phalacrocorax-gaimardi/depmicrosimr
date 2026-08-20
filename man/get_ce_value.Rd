@@ -4,7 +4,16 @@
 \alias{get_ce_value}
 \title{get_ce_value}
 \usage{
-get_ce_value(scen, flat, tou_noflex, tou_flex, det_noflex, det_flex)
+get_ce_value(
+  scen,
+  flat,
+  tou_noflex,
+  tou_flex,
+  det_noflex,
+  det_flex,
+  flex_certainty_tou = 0.8,
+  flex_certainty_det = 0.7
+)
 }
 \arguments{
 \item{scen}{scenario dataframe source of the pt_* prospect-theory parameters, including
@@ -19,6 +28,10 @@ the plan-specific certainty-of-flex values (\code{pt_certainty_flex_tou}, \code{
 \item{det_noflex}{annual cost on dynamic, unshifted load}
 
 \item{det_flex}{annual cost on dynamic, optimally shifted load}
+
+\item{flex_certainty_tou}{flexibility outcome confidence tou}
+
+\item{flex_certainty_det}{flexibility outcome confidence det}
 }
 \value{
 a list: \code{flat}, \code{certainty_tou}, \code{CE_tou}, \code{CE_bill_tou},
@@ -40,6 +53,6 @@ the guaranteed saving a household would consider exactly as good as the actual u
 }
 \examples{
 prices_scen <- set_prices(sD)
-costs <- get_prospect_costs(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)$costs
+costs <- get_prospect_costs_light(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)
 get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex)
 }
