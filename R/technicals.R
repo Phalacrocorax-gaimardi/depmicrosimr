@@ -600,7 +600,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #' flex_scores %>% dplyr::filter(eta==0.4,phi==0.5)  %>% dplyr::slice_max(flex_1hr)
 flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 
-  train_data <- flex_scores %>%
+  train_data <- flex_scores %>% dplyr::filter(gamma >= 0.5) %>%
     dplyr::filter(
       tariff_plan == "tou",
       eta == eta_targ,

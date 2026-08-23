@@ -9,8 +9,8 @@ initialise_agents(
   start_year = 2019,
   prices_scen,
   social_network,
-  eta = 0.6,
-  phi = 0.5
+  eta = 0.5,
+  phi = 0.7
 )
 }
 \arguments{
