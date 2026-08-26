@@ -4,27 +4,29 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen, cru_cap = TRUE)
+set_prices(scen, end_year = 2040, cru_cap = TRUE)
 }
 \arguments{
 \item{scen}{scenario}
 
+\item{end_year}{last full year for simulation}
+
 \item{cru_cap}{Boolean, defaults to TRUE}
 }
 \description{
-set_prices() is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges. The purpose of
+\code{set_prices()} is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges. The purpose of
 this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
-prices with reasnable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections would not be meaningful because they would depend
+prices with reasonable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
 on specific assumptions. This is equivalent to the assumption that network supplier set their prices so that the average price paid by
 customers on flat, ToU and dynamic prices are similar across standard profiles.\cr
 \cr
 Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
-peak_network_charge_fun(scen,yeartime) etc. There is a supplier uplift on top of the regulated network charge. The model assumes that
+\code{peak_network_charge_fun(scen,yeartime)} etc. These are supposed to include supplier uplift, and other systems charges on top of the regulated network TUoS and DUos network charge. The model assumes that
 wholesale prices + VAT are passed through.\cr
 \cr
-set_prices() is run at the beginning of each run.\cr
+set_prices() is meant to to run at the beginning of each ABM run.\cr
 \cr
-Optionally, the price cap (currently 0.5) can be turned off.
+Optionally, the CRU wholesale price cap (currently 0.5euro/kWh) can be turned off.
 }
 \examples{
 set_prices(sD)

@@ -15,7 +15,7 @@ simulate_hmm(n_steps, hmm_fit)
 vector of values of length n_steps
 }
 \description{
-Utility function to simulate hidden markov time-series in base R. Used by dynamic_prices()
+Utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
 }
 \examples{
 simulate_hmm(100,hmm_fit)

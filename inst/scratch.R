@@ -1381,4 +1381,41 @@ generate_empirical_tariffs(day_rate_anchor = 40.00)
 
 tariffs <- read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/tariffs.csv")
 
-#
+#########################
+# load_profiles_generalised
+########################
+
+generalise_load_profiles <- function(sD,start_year,end_year){
+
+  start <- lubridate::date_decimal(start_year)
+  end <- lubridate::date_decimal(end_year+1)
+  ts <- tibble::tibble(datetime=seq(start,end,by="hour"))
+  ts <- ts %>% mutate(mdh=format(datetime, "%m-%d-%H"))
+  ts <- ts %>% mutate(year = year(datetime)) %>% left_join(dst_dates, by = "year") %>% mutate(is_dst = datetime >= dst_start & datetime < dst_end) %>% select(-year, -starts_with("dst_"))
+
+  load_profiles_g <- depmicrosimr::load_profiles %>% dplyr::mutate(mdh = format(datetime, "%m-%d-%H")) %>% dplyr::select(-datetime,-day_note)
+
+  load_profiles_g <- ts %>% left_join(load_profiles_g)
+
+  load_profiles_g <- load_profiles_g %>% dplyr::arrange(datetime) %>% dplyr::mutate(across(starts_with("lp"), ~ dplyr::if_else(
+      is.na(.),
+      (lag(., 168) + lead(., 168)) / 2,.)))
+
+
+  load_profiles_g <- load_profiles_g %>% mutate(local_hour=(hour(datetime) + as.integer(is_dst)) %% 24)
+  load_profiles_g <- load_profiles_g %>% mutate(tou_band = case_when(local_hour >= 17 & local_hour < 19 ~ "peak",local_hour >= 23 | local_hour < 8  ~ "night",TRUE~ "day"))
+  load_profiles_g <- load_profiles_g %>% select(-local_hour,-mdh,-is_dst)
+
+  load_profiles_g %>% filter(year(datetime) <= end_year)
+}
+
+load_profiles_generalised <- generalise_load_profiles(sD,2019,2040)
+
+#check
+load_profiles_generalised %>% filter(year(datetime)==2028,month(datetime)==2,week(datetime)==9) %>% ggplot(aes(datetime,lp1))+geom_line()
+
+dst_dates <- read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dst_dates.csv")
+dst_dates <- dst_dates %>% mutate(dst_start=dmy(dst_start),dst_end=dmy(dst_end))
+#write_csv(dst_dates,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dst_dates.csv")
+
+#write_csv(load_profiles_generalised,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/load_profiles_generalised.csv")

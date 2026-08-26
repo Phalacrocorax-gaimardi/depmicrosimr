@@ -598,7 +598,7 @@ profiler <- function(eta,gamma,N=10){
 #profiler(0.4,20,100) 0.1676211
 #profiler(0.4,50,100)  0.1647912
 #profiler(0.4,100,100) 0.2152141
-profiler(0.0,0,10)
+profiler(0.6,5,200)
 
 flex_scores <- flex_scores %>% arrange(phi,gamma,eta,tau)
 df_err <- tibble()

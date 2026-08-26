@@ -8,8 +8,10 @@
 #smart_meter_rollout <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/smart_meter_rollout.csv")
 #tou_tariffs <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/tariffs.csv")
 #diurnal_inflex <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/relative_inflexibile_load_share.csv")
+#dst_dates <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dst_dates.csv")
 
 #flex_scores <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
+#load_profiles_generalised <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/load_profiles_generalised.csv")
 
 
 
@@ -412,7 +414,7 @@ generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 
 #' simulate hmm
 #'
-#' Utility function to simulate hidden markov time-series in base R. Used by dynamic_prices()
+#' Utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
 #'
 #' @param n_steps length of time-series
 #' @param hmm_fit listof HMM parameters
@@ -442,31 +444,31 @@ simulate_hmm <- function(n_steps, hmm_fit) {
   return(sim_series)
 }
 
-#' dynamic_prices
+#' sem_prices
 #'
-#' returns a simulation of sem electricity prices to end_year. The period 2019-2025 uses historic prices. \cr
+#' \code{sem_prices()} returns a simulation of wholesale (sem) prices to end_year in a scenario. The period 2019-2025 uses historic prices. \cr
 #' \cr
-#' This is based on the wholesale price decomposition in sem_logprices_2019_2025_decomp for observed seasonality (daily, weekly and annual),
+#' \code{sem_prices()} is based on the wholesale price decomposition in sem_logprices_2019_2025_decomp for observed seasonality (daily, weekly and annual),
 #' and the pre-fit gaussian HMM for logprice residuals. Projections are based on trend price scenarios for 2030 and 2040.\cr
 #' \cr
-#' #' This function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040.\cr
+#' #' The function generates an hourly wholesale price simulation from Jan 1 2026 to 31 Dec 2040, with additional leap year days included.\cr
 #' \cr
 #' The projections derive from the product of three factors - a price trend, a seasonal component, and a hidden markov gaussian noise components. Thus
 #' projections reflect heteroskedasticity of electricity prices and and is achieved through a log-type transformation of the price data.
 #' \cr
 #' In practice the transformation used is \eqn{ \asinh{\frac{price}{scale}}}. This handles negative wholesale prices but is similar to
 #' a log transformation for prices greater than \eqn{scale}.
-#' pre 2026
+#' pre 2026\cr
 #'
-#' @param scen scenario
+#' @param scen scenario e.g. sD
 #' @param end_year end year
 #'
 #' @returns dataframe with columns datetime, price (euros/kWh)
 #' @export
 #'
 #' @examples
-#' dynamic_prices(sD)
-dynamic_prices <- function(scen,end_year=2040){
+#' sem_prices(sD)
+sem_prices <- function(scen,end_year=2040){
   #
   scale0 <- scen %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
   t1 <- lubridate::ymd_hms("2026-01-01 00:00:00", tz = "UTC")
@@ -544,7 +546,7 @@ dynamic_prices <- function(scen,end_year=2040){
   #scale all price by dynamic scale
   hist <- sem_logprices_2019_2025_decomp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
   hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)/1000) %>% dplyr::select(-logprice)
-  hist %>% dplyr::bind_rows(sim_prices)
+  hist %>% dplyr::bind_rows(sim_prices) %>% dplyr::rename("sem_price"=price)
 
 }
 
@@ -555,7 +557,7 @@ dynamic_prices <- function(scen,end_year=2040){
 #' get_sem_prices
 #'
 #' creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
-#' The dynamic simulated prices set at the beginning of each model run (dyn_prices) (no need to recalculate during a run).
+#' The dynamic simulated prices set at the beginning of each model run (no need to recalculate during a run).
 #'
 #' @param scen scenario
 #' @param start_year default 2019
@@ -574,7 +576,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
   tou <- tou_tariffs %>% dplyr::rename("hour"=start) %>% dplyr::rename("tou"=tariff) %>% dplyr::select(-end)
   ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou,by="hour") %>% dplyr::select(-hour)
 
-  dynamic <- dynamic_prices(scen,end_year) %>% dplyr::select(-regime)
+  dynamic <- sem_prices(scen,end_year) %>% dplyr::select(-regime)
   ts %>% dplyr::inner_join(dynamic,by="datetime")
   #impose a price cap
   #cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
