@@ -38,8 +38,8 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network,0.6,0.5)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.5,phi=0.7){
+#' initialise_agents(sD,2019,prices_scen,social_network,0.4,0.5)
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,phi=0.5){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
@@ -74,23 +74,28 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in$eta <- eta
   agents_in$phi <- phi
   #generate "flexibility scores" (hourly MAD load-shifting index) range from min_flex to max_flex%
+  flex_alpha <- scen %>% dplyr::filter(parameter=="flex_alpha.") %>% dplyr::pull(value)
+  flex_beta <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
+  #map survey flexibilities to 0,1-phi using Beta distribution
+  map_flex <- function(s) {
+    # 1. Standardize s to uniform percentile U in (0, 1)
+    u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
 
-  flex_scale <- scen %>% dplyr::filter(parameter=="flex_scale.") %>% dplyr::pull(value)
-  flex_sigma <- scen %>% dplyr::filter(parameter=="flex_sigma.") %>% dplyr::pull(value)
-  #interpret survey flexibilities as log(1h flexibility index) (lognormal distributed)
-  #agents_in <- agents_in %>% dplyr::mutate(flex_score= min_flex+max_flex*(flexibility - min(flexibility))/(max(flexibility)-min(flexibility)))
+    # 2. Map percentile through Beta quantile function (smooth, no clipping)
+    y <- qbeta(u, shape1 = flex_alpha, shape2 = flex_beta)
 
-  agents_in <- agents_in %>% dplyr::mutate(flex_score= pmin(70,flex_scale*exp(flex_sigma*flexibility))) #
+    # 3. Scale by available headroom
+    return(100*(1 - phi) * y)
+  }
+  agents_in <- agents_in %>% dplyr::mutate(flex_score_0=map_flex(flexibility)) #
 
   #check weighted mean flexibility
-  weighted_mean <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  print(paste("weighted mean of household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
   #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
   #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
   #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
   #sample flexible parameter values based on flex_score
   score_cube <- flex_score_cube(eta,phi)
-  agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score,score_cube)) %>% dplyr::ungroup()
+  agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score_0,score_cube)) %>% dplyr::ungroup()
   #rescale eta and gamma parameters according to mean hourly demand
   # reduced effect of quadratic
   #agents_in <- agents_in %>% dplyr::mutate(eta=eta*(8760/kWh), gamma=gamma*(8760/kWh))
@@ -118,6 +123,10 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #add the network degree
   agents_in <- agents_in %>% dplyr::inner_join(tibble::as_tibble(social_network) %>% dplyr::select(serial,degree),by="serial")
   print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
+  weighted_mean <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
+  print(paste("weighted mean of household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
+  print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
+  agents_in %>% dplyr::select(-flex_score_0) %>% return()
   agents_in %>% return()
 }
 

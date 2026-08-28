@@ -17,5 +17,5 @@ given input values for \eqn{\eta,\phi}. Flexibility is on a 1-hour measure.
 }
 \examples{
 flex_score_cube(0.4,0.5) \%>\% dplyr::slice_max(flex_score)
-flex_scores \%>\% dplyr::filter(eta==0.4,phi==0.5)  \%>\% dplyr::slice_max(flex_1hr)
+ff <-  flex_scores \%>\% dplyr::filter(eta==0.5,phi==0.6)
 }

@@ -31,4 +31,5 @@ pre 2026\cr
 }
 \examples{
 sem_prices(sD)
+
 }

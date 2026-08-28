@@ -468,6 +468,7 @@ simulate_hmm <- function(n_steps, hmm_fit) {
 #'
 #' @examples
 #' sem_prices(sD)
+#'
 sem_prices <- function(scen,end_year=2040){
   #
   scale0 <- scen %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
@@ -477,9 +478,7 @@ sem_prices <- function(scen,end_year=2040){
   hourly_sequence <- seq(from = t1, to = t2, by = "1 hour")
 
   sim_length <- length(hourly_sequence)
-
   sim_series <- simulate_hmm(sim_length, depmicrosimr::hmm_fit)
-
   sim_logprices <-  tibble::tibble(datetime=hourly_sequence,sim=sim_series)
   #seasonal factors
   daily_lookup <- sem_logprices_2019_2025_decomp %>% tibble::as_tibble() %>%
@@ -552,42 +551,6 @@ sem_prices <- function(scen,end_year=2040){
 
 #dyn <- simulate_prices(dcmp,hmm_fit, trend_price_2030=trend_price_2030, trend_price_2040=trend_price_2040)
 
-
-
-#' get_sem_prices
-#'
-#' creates future hourly retail electricity prices for flat, day/night/peak and dynamic tariff plans up to end_year. In the dynamic case of
-#' The dynamic simulated prices set at the beginning of each model run (no need to recalculate during a run).
-#'
-#' @param scen scenario
-#' @param start_year default 2019
-#' @param end_year default 2040
-#'
-#' @returns 3 column tibble datetime,tariff_plan, price
-#' @export
-#'
-#' @examples
-#' prices_scen <- get_sem_prices(sD)
-get_sem_prices <- function(scen,start_year=2019,end_year=2040){
-  #
-  start <- lubridate::date_decimal(start_year)
-  end <- lubridate::date_decimal(end_year+1)
-  ts <- tibble::tibble(datetime=seq(start,end,by="hour"))
-  tou <- tou_tariffs %>% dplyr::rename("hour"=start) %>% dplyr::rename("tou"=tariff) %>% dplyr::select(-end)
-  ts <- ts %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou,by="hour") %>% dplyr::select(-hour)
-
-  dynamic <- sem_prices(scen,end_year) %>% dplyr::select(-regime)
-  ts %>% dplyr::inner_join(dynamic,by="datetime")
-  #impose a price cap
-  #cap_scale <- scen %>% dplyr::filter(parameter=="dynamic_price_cap_scale") %>% dplyr::pull(value)
-  #dynamic <- dynamic %>% dplyr::mutate(price_cap = cap_scale*flat_tariff_fun(sD,lubridate::decimal_date(datetime)))
-  #dynamic <- dynamic %>% dplyr::mutate(price = pmin(price_cap, price)) %>% dplyr::select(-price_cap)
-
-  #dynamic$tariff_plan <- "dynamic"
-
-}
-
-
 #' flex_score_cube
 #'
 #' utility function used by \code{match_flex_params()}. \code{flex_score_cube()} returns a table of flexibilty scores for a range \eqn{\gamma,\tau} pairs,
@@ -599,7 +562,7 @@ get_sem_prices <- function(scen,start_year=2019,end_year=2040){
 #'
 #' @examples
 #' flex_score_cube(0.4,0.5) %>% dplyr::slice_max(flex_score)
-#' flex_scores %>% dplyr::filter(eta==0.4,phi==0.5)  %>% dplyr::slice_max(flex_1hr)
+#' ff <-  flex_scores %>% dplyr::filter(eta==0.5,phi==0.6)
 flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 
   train_data <- flex_scores %>% dplyr::filter(gamma >= 0.5) %>%
@@ -653,8 +616,8 @@ flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.2,0.5)
-#' match_flex_params(40,score_cube)
+#' score_cube <- flex_score_cube(0.4,0.7)
+#' sapply(seq(1,70), function(f) match_flex_params(f,score_cube)$flex_score)
 #'
 match_flex_params <- function(x,score_cube){
   #
@@ -957,7 +920,7 @@ get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, 
 #'
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' get_flex_scores(sD,2026,8760,"tou",0,1,0.6,48,"exp","LP1",prices_scen)
+#' get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp","LP1",prices_scen)
 #' get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
 #'
 get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,profile="LP1",prices_scen){

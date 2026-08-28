@@ -49,7 +49,7 @@ The main use of this function is to map out the relationship flexibility paramet
 }
 \examples{
 prices_scen <- set_prices(sD)
-get_flex_scores(sD,2026,8760,"tou",0,1,0.6,48,"exp","LP1",prices_scen)
+get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp","LP1",prices_scen)
 get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
 
 }

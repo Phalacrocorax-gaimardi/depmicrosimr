@@ -9,8 +9,8 @@ initialise_agents(
   start_year = 2019,
   prices_scen,
   social_network,
-  eta = 0.5,
-  phi = 0.7
+  eta = 0.4,
+  phi = 0.5
 )
 }
 \arguments{
@@ -53,5 +53,5 @@ The nework input is used to determine the social degree of each agent.
 \examples{
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-initialise_agents(sD,2019,prices_scen,social_network,0.6,0.5)
+initialise_agents(sD,2019,prices_scen,social_network,0.4,0.5)
 }

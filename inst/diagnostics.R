@@ -296,10 +296,10 @@ get_flex_scores(sD,2026,8760,"dynamic",0,1,1,96,"matern",profile="LP1",prices_sc
 
 flex_scores_new <- tibble()
 #flex_scores_new <-read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/flex_scores.csv")
-for(eta in 0.6)
- for(tariff_plan in c("tou","dynamic"))
-  for(phi in seq(0,0.8,by=0.2))
-   for(gamma in c(1,10,20,50,100))
+for(eta in 2)
+ for(tariff_plan in c("tou"))
+  for(phi in flex_scores$phi %>% unique())
+   for(gamma in flex_scores$gamma %>% unique())
       for(tau in c(6,12,18,24,30,36,48,60,72))
       {
           print(paste("phi=",phi,"tau=",tau))
@@ -582,35 +582,41 @@ get_full_annual_cost <- function (yeartime = 2030, kWh = 8760, tariff_plan, phi 
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 
-profiler <- function(eta,gamma,N=10){
+
+week_profiles <- load_profiles %>% group_by(week=week(datetime)) %>% summarise(lp1=mean(lp1),lp2=mean(lp2),ratio=lp1/lp2)
+#
+week_profiles %>% ggplot(aes(week,ratio))+geom_line()
+#
+load_profiles_adj <- load_profiles %>% mutate(week=week(datetime)) %>% inner_join(week_profiles %>% select(week,ratio)) %>% mutate(lp2_adj=lp2*ratio)
+#
+load_profiles_adj %>% ggplot() + geom_line(aes(datetime,lp2_adj)) + geom_line(aes(datetime,lp2),colour="red")
+
+profiler <- function(eta,phi,N=10){
   #
-  agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=eta,gamma=gamma)
+  agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=eta,phi=phi)
   agents_init <- agents_init %>% filter(natural_profile=="lp1")
   n_agent <- dim(agents_init)[1]
   print(paste("n_agent=",n_agent))
   res <- get_aggregate_test_profile(2026,agents_init[sample(1:n_agent,N),],"tou",prices_scen)
-  res <- res %>% inner_join(load_profiles,by="datetime") %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load))
-  res <- res %>% mutate(err=abs(optimised_load_profile-lp2),rel_err = abs(optimised_load_profile-lp2)/lp2)
+  res <- res %>% inner_join(load_profiles_adj,by="datetime") %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load))
+  res <- res %>% mutate(err=abs(optimised_load_profile-lp2_adj))
   sum(res$err)
 }
 
-#profiler(0.4,10,100) 0.225
-#profiler(0.4,20,100) 0.1676211
-#profiler(0.4,50,100)  0.1647912
-#profiler(0.4,100,100) 0.2152141
-profiler(0.6,5,200)
+profiler(0.6,,200)
 
 flex_scores <- flex_scores %>% arrange(phi,gamma,eta,tau)
 df_err <- tibble()
 for(eta in flex_scores$eta %>% unique())
-  for(gamma in flex_scores %>% filter(gamma <= 5) %>% pull(gamma) %>% unique()){
-    print(paste(gamma,eta))
-    df <- tibble(eta=eta,gamma=gamma) %>% mutate(err=profiler(eta,gamma,10))
+  for(phi in 0.5){
+    print(paste(eta,phi))
+    df <- tibble(eta=eta,phi=phi) %>% mutate(err=profiler(eta,phi,10))
     print(df)
     write_csv(df, "~/Policy/CAMG/Dynamic Pricing/df_err.csv",append=T)
     df_err <- df_err %>% bind_rows(df)
   }
 
+df_err %>% ggplot(aes(eta,err)) + geom_line() + geom_point()
 
 demand <- prices_scen
 demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2030)
@@ -647,16 +653,33 @@ get_aggregate_test_profile <- function(year,agents_init,tariff_plan,prices_scen)
   return(res)
 
 }
+#
+flex_scores <- read_csv("~/Policy/CAMG/Dynamic Pricing/flex_scores.csv")
 
-agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=0,gamma=0)
-
+f <- tibble()
+for(phi in c(0.00,0.25,0.40,0.50,0.60,0.65,0.75, 0.85,0.95)){
+  agents_init <- initialise_agents(sD,2019,prices_scen,social_network,eta=1,phi)
+  agents_in <- agents_init %>% filter(natural_profile=="lp1")
+  print(agents_in$flex_score %>% mean())
+  f <- f %>% bind_rows(tibble(phi=phi,flex = agents_in$flex_score %>% mean()))
+  }
+f %>% ggplot(aes(phi,flex)) + geom_line()
+#
+#
 agents_in <- agents_init %>% filter(natural_profile=="lp1")
+agents_in$flex_score %>% mean()
 n_agents <- dim(agents_in)[1]
 res <- get_aggregate_test_profile(2026,agents_in[sample(1:n_agents,50),],"tou",prices_scen)
-
+res <- res %>% mutate(optimised_load_profile = optimised_load/sum(optimised_load)) %>% inner_join(load_profiles_adj %>% select(datetime,lp1,lp2,lp2_adj))
+#summary properties
+sd(res$lp2_adj)
+sd(res$lp2)
+sd(res$lp1)
+sd(res$optimised_load_profile)
+#
 g1 <- res %>% filter(week(datetime)==24) %>% ggplot() + geom_line(aes(datetime,natural_load),linetype="dotted") + geom_line(aes(datetime,optimised_load),linetype="solid")
 g1 <- g1 + theme_minimal()
-
+#
 g2 <- load_profiles %>% filter(week(datetime)==24) %>% ggplot() + geom_line(aes(datetime,lp1),linetype="dotted") + geom_line(aes(datetime,lp2),linetype="solid")
 g2 <- g2 + theme_minimal()
 #
@@ -664,6 +687,8 @@ g2 <- g2 + theme_minimal()
 g1/g2 + plot_annotation(title = "eta=0.5")
 
 #match aggregate profile to LP2
+
+res$lo
 
 res <- res %>% inner_join(load_profiles)
 res <- res %>% mutate(optimised_load_profile=optimised_load/sum(optimised_load)) %>% mutate(err=abs(optimised_load_profile-lp2))
@@ -685,6 +710,16 @@ shift %>% ggplot(aes(hour,difference))+geom_area()
 
 
 ######################
-# mean
+# check fit quality
 #######################
+
+prices_scen <- set_prices(sD)
+social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+initialise_agents(sD,2019,prices_scen,social_network,0.4,0.5)
+
+agents_in %>% ggplot(aes(gamma)) + geom_histogram()
+
+
+
+
 
