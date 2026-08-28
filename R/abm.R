@@ -87,19 +87,10 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
     # 3. Scale by available headroom
     return(100*(1 - phi) * y)
   }
-  agents_in <- agents_in %>% dplyr::mutate(flex_score_0=map_flex(flexibility)) #
-
-  #check weighted mean flexibility
-  #standardized_z <- agents_in$flexibility/sd(agents_in$flexibility)
-  #agents_in$flex_score <- (standardized_z * (15 / 2.576)) + 15
-  #agents_in$flex_score <- pmax(1.01*min(score_matrix),agents_in$flex_score)
-  #sample flexible parameter values based on flex_score
+  #compute 1hr implied flexibilities
+  agents_in$flex_score_0 <- map_flex(agents_in$flexibility)
   score_cube <- flex_score_cube(eta,phi)
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score_0,score_cube)) %>% dplyr::ungroup()
-  #rescale eta and gamma parameters according to mean hourly demand
-  # reduced effect of quadratic
-  #agents_in <- agents_in %>% dplyr::mutate(eta=eta*(8760/kWh), gamma=gamma*(8760/kWh))
-  #rescale proactive: 0 to theta_max: theta_max very risk intolerant
   theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
   agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
   #assign natural profile codes : currently only an urban/rural profile
@@ -127,7 +118,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   print(paste("weighted mean of household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
   print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
   agents_in %>% dplyr::select(-flex_score_0) %>% return()
-  agents_in %>% return()
+  #agents_in %>% return()
 }
 
 
