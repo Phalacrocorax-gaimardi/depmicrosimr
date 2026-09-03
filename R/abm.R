@@ -39,7 +39,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network,0.4,0.5)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,phi=0.5){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.5,phi=0.5){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
@@ -85,7 +85,8 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
     y <- qbeta(u, shape1 = flex_alpha, shape2 = flex_beta)
 
     # 3. Scale by available headroom
-    return(100*(1 - phi) * y)
+    #allow for the effect of eta in limiting flex_score range using empirical formula
+    return(100*(1 - 0.876*phi-0.27*eta) * y)
   }
   #compute 1hr implied flexibilities
   agents_in$flex_score_0 <- map_flex(agents_in$flexibility)
@@ -173,7 +174,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #
   tariff_plan_bills_env <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,...) {
 
-    tariff_plan_bills(kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,prices_scen)
+    tariff_plan_bills(kWh,phi,gamma,eta,tau,natural_profile,rollout,prices_scen,params)
   }
 
   if (behavioural_model== "classic") {
@@ -221,7 +222,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
       c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
       #adjust ce_det according to share of associates who have adopted dynamic
       c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect
-      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,yeartime,rollout,c_tou,c_det,prices_scen)
+      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,prices_scen,params)
       # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
       # flat is the deferred retrospective piece, not decided here)
       new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision

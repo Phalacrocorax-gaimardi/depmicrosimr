@@ -2,49 +2,53 @@
 % Please edit documentation in R/technicals.R
 \name{get_full_annual_cost}
 \alias{get_full_annual_cost}
-\title{get_full_annual_cost}
+\title{get_full_cost}
 \usage{
 get_full_annual_cost(
-  yeartime = 2030,
   kWh = 8760,
   tariff_plan,
   phi = 0.5,
-  gamma = 10,
-  eta = 1,
-  tau = 24,
+  gamma = 2,
+  eta = 0.5,
+  tau = 36,
   kernel = "exp",
   natural_profile = "LP1",
-  prices_scen
+  prices_scen,
+  params
 )
 }
 \arguments{
-\item{yeartime}{start of annual evaluation period}
-
 \item{kWh}{annual kWh}
 
 \item{tariff_plan}{tariff plan}
 
 \item{phi}{inflexible fraction}
 
-\item{gamma}{dimensionless cost penality}
+\item{gamma}{dimensionless cost penalty}
 
 \item{eta}{dimensionless ramping penalty}
 
-\item{tau}{energy recorovery horizon}
+\item{tau}{energy recovery horizon}
 
-\item{kernel}{chocie of kerel, default "exp"}
+\item{kernel}{choice of kernel, default "exp"}
 
 \item{natural_profile}{L1 or LP3 at the moment}
 
 \item{prices_scen}{price scenario}
+
+\item{params}{parameters at yeartime}
+}
+\value{
+dataframe with cost breakdown
 }
 \description{
-This functional calculates the projected annual electricity cost at yeartime. The behavioural costs are included.
+\code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
 }
 \examples{
 prices_scen <- set_prices(sD)
-get_full_annual_cost(2030,8760,"flat",0.2,10,0.1,24,"exp","LP1",prices_scen)
-get_full_annual_cost(2030,8760,"tou",0.2,10,0.1,24,"exp","LP1",prices_scen)
-get_full_annual_cost(2030,8760,"dynamic",0.2,10,0.1,24,"exp","LP1",prices_scen)
+params <- scenario_params(sD,2030)
+get_full_annual_cost(4200,"flat",0.,10,0.1,24,"exp","LP1",prices_scen,params)
+get_full_annual_cost(4200,"tou",phi=0.5,gamma=5,eta=0.5,tau=24,"exp","LP1",prices_scen,params)
+get_full_annual_cost(8760,"dynamic",phi=0.5,gamma=1,eta=0.5,tau=72,"exp","LP1",prices_scen,params)
 
 }

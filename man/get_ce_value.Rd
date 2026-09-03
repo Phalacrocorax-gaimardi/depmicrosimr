@@ -53,6 +53,7 @@ the guaranteed saving a household would consider exactly as good as the actual u
 }
 \examples{
 prices_scen <- set_prices(sD)
-costs <- get_prospect_costs_light(8760, 0.25, 1, 0.2, 48, "LP1", 2030, 2025, prices_scen)
+params <- scenario_params(sD,2032)
+costs <- get_prospect_costs_light(8760, 0.25, 1, 0.2, 48, "LP1", 2025, prices_scen,params)
 get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex)
 }

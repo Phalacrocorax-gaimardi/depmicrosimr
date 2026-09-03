@@ -12,11 +12,11 @@ evaluate_tariffs(
   eta,
   tau,
   natural_profile = "LP1",
-  yeartime,
   smart_rollout,
   flex_certainty_tou = 0.8,
   flex_certainty_det = 0.7,
-  prices_scen
+  prices_scen,
+  params
 )
 }
 \arguments{
@@ -34,8 +34,6 @@ evaluate_tariffs(
 
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
-\item{yeartime}{current decimal time}
-
 \item{smart_rollout}{smart meter rollout time}
 
 \item{flex_certainty_tou}{confidence in tou flexibility}
@@ -43,10 +41,12 @@ evaluate_tariffs(
 \item{flex_certainty_det}{confidence in det flexibility}
 
 \item{prices_scen}{price scenario}
+
+\item{params}{parameters at params$yeartime}
 }
 \value{
-a list: \\code{costs} (the five annual costs), \\code{ce} (the full \\code{get_ce_value()}
-output), and \\code{decision} (\\code{"flat"}, \\code{"tou"}, or \\code{"dynamic"})
+a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}
+output), and \code{decision} (\code{"flat"}, \code{"tou"}, or \code{"dynamic"})
 }
 \description{
 Agents' prospect-theory evaluation of the initial fixed to flexible switching decision. \code{evaluate_tariffs()} uses \code{get_prospect_costs()} (the five annual costs) and \code{get_ce_value()}
@@ -57,5 +57,6 @@ Agents' prospect-theory evaluation of the initial fixed to flexible switching de
 }
 \examples{
 prices_scen <- set_prices(sD)
-evaluate_tariffs(sD,kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2025,prices_scen = prices_scen)
+params <- scenario_params(sD,2032)
+evaluate_tariffs(sD,kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", smart_rollout = 2025,0.8,0.7,prices_scen = prices_scen,params)
 }

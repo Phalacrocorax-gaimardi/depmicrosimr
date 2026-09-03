@@ -10,7 +10,7 @@ net_prices(scen)
 \item{scen}{scenario}
 }
 \description{
-net_price(scen) returns the network charge assumptions
+\code{net_price()} returns the network charge assumptions
 }
 \details{
 Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from

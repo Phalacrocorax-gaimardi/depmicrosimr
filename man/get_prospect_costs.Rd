@@ -61,6 +61,7 @@ yet available are \code{NA}; their profiles are simply absent from the returned 
 # sample values for standalone development/testing in the real ABM these come from a
 # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
 prices_scen <- set_prices(sD)
+params <- scenario_params(sD,2034)
 result <- get_prospect_costs(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2020,prices_scen = prices_scen)
 result$costs
 result$profiles$tou

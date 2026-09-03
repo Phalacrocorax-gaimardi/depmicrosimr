@@ -39,13 +39,16 @@ of prices \eqn{p(t)} \cr
 \cr
 The "natural" household load profile without load-shifting is \eqn{L_t^0}, corresponding to a flat electricity price profile of the household. Load-shifting arises in response to time-varying prices \eqn{p_t}.
 The billing cost is is linear \eqn{\sum_{t=1}^T p_t L_t} where \eqn{L_t} is the load-shifted hourly consumption. Two additional cost penalties arise:
-\deqn{\delta C = \sum_{t=1}^T p_t x_t + \eta \sum_t (x_{t+1}-x_t)^2 + \gamma \sum_t \left( \sum_k g(k-t) x_k \right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
+\deqn{\delta c = \sum_{t=1}^T p_t x_t + \eta \sum_t (x_{t+1}-x_t)^2 + \gamma \sum_t \left( \sum_k g(k-t) x_k \right)^2}{C = sum(p*L) + eta*sum(diff(L)^2) + gamma*sum((L-L0)^2)}
 \cr
-The second term is "ramping" cost penalty that limits unrealistic rapid \eqn{x_t} variations in response to minor price variations. The third term is teh square of
-a convolution of \eqn{x_t} withe a kernel \eqn{g_t} that decays on some timescale \eqn{\tau}. This decay timescale represents the willingness of the
-household to defer or advance loads in response to anticipated price changes.A simple choice is \eqn{g(t)= \sqrt{\frac{2}{\tau}} \exp(-t/\tau)}
+The quantity to be minimised \eqn{\cal{c}=\frac{C}{E})} where \eqn{E=\sum_t L_t = \sum_t L_t^0}. \eqn{x_t} is the dimensionless household load profile, and \eqn{\eta,\gamma} are cost parameters with dimensions of
+euro per kWh.
 }
 \details{
+The second term is a "ramping" cost penalty that limits unrealistic rapid household load variations in response to minor price variations and controls the overall smoothness of the \eqn{x_t}. The third term is the square of
+a convolution of \eqn{x_t} with a kernel \eqn{g_t}. \eqn{g_t} decays on some timescale \eqn{\tau} that represents the time horizon over which households are willing to defer or advance
+consumption in response to anticipated price changes. It is natural to normalise the kernel so that \eqn{\int g_t^2 dt = 1}. The standard symetric choice in \eqn{depmicrosimr} is \eqn{g(t)= \sqrt{\frac{1}{\tau}} \exp(-|t|/\tau)}.
+
 \cr
 The \eqn{\eta} term prevents excessive load-shifting in response to small differences in prices (regularisation). The \eqn{\gamma_\tau} term is permits
 is a stiffness term that limits load-shifting over a timescale \eqn{\tau} but inhibits it on longer timescales.\cr
@@ -59,7 +62,9 @@ Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total hou
 \cr
 The inflexible fraction \eqn{\phi} is modulated by a time-of-day factor \eqn{f_t}. This is inferred from the lowest quantile of smart meter dataset. Generally \eqn{f_t > 1} at night and less than one during the day. The inflexible fraction is defined as
 \deqn{ \phi_t = \phi-(1-\phi)\log(1-\phi)*(f_t-1)}
-This has the desired properties the mean of \eqn{\phi_t} equals \eqn{\phi} and \eqn{\phi_t \rightarrow 1} as \eqn{\phi \rightarrow 1}, irrespective of \eqn{f_t}.
+This has the desired properties the mean of \eqn{\phi_t} equals \eqn{\phi} and \eqn{\phi_t \rightarrow 1} as \eqn{\phi \rightarrow 1}, irrespective of \eqn{f_t}.\cr
+\cr
+Depending in user intent, two parameter scaling models are implemented - "
 }
 \examples{
 
@@ -68,6 +73,6 @@ demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
 demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
 demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
 demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0.9999,gamma=10,eta=0.5,tau=48,kernel="exp")
+test <- get_flex(demand,phi=0.5,gamma=1,eta=0.5,tau=48,kernel="exp")
 100*sum(abs(test$load_opt-test$load))/8760
 }

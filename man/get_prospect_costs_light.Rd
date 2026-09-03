@@ -11,9 +11,9 @@ get_prospect_costs_light(
   eta,
   tau,
   natural_profile = "LP1",
-  yeartime,
   smart_rollout,
-  prices_scen
+  prices_scen,
+  params
 )
 }
 \arguments{
@@ -29,11 +29,11 @@ get_prospect_costs_light(
 
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
-\item{yeartime}{current decimal time}
-
 \item{smart_rollout}{smart meter rollout time}
 
 \item{prices_scen}{price scenario}
+
+\item{params}{scenario parameters at yeartime}
 }
 \value{
 a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,
@@ -64,6 +64,7 @@ yet available are \code{NA}; their profiles are simply absent from the returned 
 # sample values for standalone development/testing  in the real ABM these come from a
 # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
 prices_scen <- set_prices(sD)
-result <- get_prospect_costs_light(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2020,prices_scen = prices_scen)
-result
+params <- scenario_params(sD,2031)
+get_prospect_costs_light(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", smart_rollout = 2020, prices_scen,params)
+
 }

@@ -17,9 +17,10 @@ standing_charge_fun(scen, yeartime, tariff_plan)
 standing charge
 }
 \description{
-household standing charge (expectations & historical). The current setup assumes that the standing charges for flat and tou pricing are the same.
+household standing charge (historical and scenario projection). The current setup assumes that the standing charges for flat and tou pricing are the same.
 The dynamic standing charge may differ.
 }
 \examples{
 standing_charge_fun(sD,2036,"dynamic")
+standing_charge_fun(sD,2036,"tou")
 }

@@ -37,7 +37,7 @@ scenario_params <- function(scenario,yeartime){
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="peak_network_charge", value=  peak_network_charge_fun(scenario,yeartime)))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_flat", value =  standing_charge_fun(scenario,yeartime,"flat")))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_tou", value =  standing_charge_fun(scenario,yeartime,"tou")))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_dyn", value =  standing_charge_fun(scenario,yeartime,"dyn")))
+  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_dynamic", value =  standing_charge_fun(scenario,yeartime,"dynamic")))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(scenario, parameter=="p.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
@@ -254,7 +254,7 @@ peak_network_charge_fun <- function(scen,yeartime){
 
 #' standing_charge_fun
 #'
-#' household standing charge (expectations & historical). The current setup assumes that the standing charges for flat and tou pricing are the same.
+#' household standing charge (historical and scenario projection). The current setup assumes that the standing charges for flat and tou pricing are the same.
 #' The dynamic standing charge may differ.
 #'
 #' @param scen scenario dataframe
@@ -266,14 +266,19 @@ peak_network_charge_fun <- function(scen,yeartime){
 #'
 #' @examples
 #' standing_charge_fun(sD,2036,"dynamic")
+#' standing_charge_fun(sD,2036,"tou")
 standing_charge_fun <- function(scen,yeartime,tariff_plan){
 
-  if(tariff_plan %in% c("flat","tou"))
-  {values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
-  res <- approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y}
-  else
-  {values <- scen %>% dplyr::filter(parameter %in% c("dynamic_standing_charge_2026","dynamic_standing_charge_2030","dynamic_standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
-  res <- approx(x=c(2026.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y}
+  stopifnot(tariff_plan %in% c("flat","tou","dynamic"))
+  #
+  if(tariff_plan !="dynamic"){
+  values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+  res <- approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y
+  } else {
+    premia <- scen %>% dplyr::filter(parameter %in% c("dep_standing_charge_premium_2026","dep_standing_charge_premium_2030","dep_standing_charge_premium_2040")) %>% dplyr::pull(value) #add more costs here if known
+    values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+    res <- approx(x=c(2026.5,2030.5,2040.5), y=values+premia,xout=yeartime,rule=2)$y
+     }
   return(res)
 
 }
@@ -761,33 +766,36 @@ get_aggregate_profile <- function(year,abm,prices_scen){
 }
 
 
-#' get_full_annual_cost
+#' get_full_cost
 #'
-#' This functional calculates the projected annual electricity cost at yeartime. The behavioural costs are included.
+#' \code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
 #'
-#' @param yeartime start of annual evaluation period
 #' @param kWh annual kWh
 #' @param tariff_plan tariff plan
 #' @param phi inflexible fraction
-#' @param gamma dimensionless cost penality
+#' @param gamma dimensionless cost penalty
 #' @param eta dimensionless ramping penalty
-#' @param tau energy recorovery horizon
-#' @param kernel chocie of kerel, default "exp"
+#' @param tau energy recovery horizon
+#' @param kernel choice of kernel, default "exp"
 #' @param natural_profile L1 or LP3 at the moment
 #' @param prices_scen price scenario
+#' @param params parameters at yeartime
 #'
-#' @returns
+#' @returns dataframe with cost breakdown
 #' @export
 #'
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' get_full_annual_cost(2030,8760,"flat",0.2,10,0.1,24,"exp","LP1",prices_scen)
-#' get_full_annual_cost(2030,8760,"tou",0.2,10,0.1,24,"exp","LP1",prices_scen)
-#' get_full_annual_cost(2030,8760,"dynamic",0.2,10,0.1,24,"exp","LP1",prices_scen)
+#' params <- scenario_params(sD,2030)
+#' get_full_annual_cost(4200,"flat",0.,10,0.1,24,"exp","LP1",prices_scen,params)
+#' get_full_annual_cost(4200,"tou",phi=0.5,gamma=5,eta=0.5,tau=24,"exp","LP1",prices_scen,params)
+#' get_full_annual_cost(8760,"dynamic",phi=0.5,gamma=1,eta=0.5,tau=72,"exp","LP1",prices_scen,params)
 #'
-get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, gamma=10, eta=1, tau=24,kernel="exp",natural_profile="LP1", prices_scen) {
+get_full_annual_cost <- function(kWh=8760, tariff_plan, phi=0.5, gamma=2, eta=0.5, tau=36,kernel="exp",natural_profile="LP1", prices_scen,params) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
+  yeartime <- params$yeartime
+  standing_charge <- params[[paste0("standing_charge_", tariff_plan)]]
   profile <- tolower(natural_profile)
   load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
   #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
@@ -862,14 +870,14 @@ get_full_annual_cost <- function(yeartime=2030, kWh=8760, tariff_plan, phi=0.5, 
   # 5. Calculate flexible loads conditionally
   if (tariff_plan != "flat") {
     df <- get_flex(df, phi, gamma, eta, tau,kernel)
-    bill_inflex <- sum(df$price * df$load)
-    bill_flex   <- sum(df$price * df$load_opt)
+    bill_inflex <- sum(df$price * df$load) + standing_charge
+    bill_flex   <- sum(df$price * df$load_opt) + standing_charge
     ramping_cost <- eta_scaled * sum(diff(df$x)^2)
     behavioural_cost <- gamma_scaled*compute_behavioural_cost(df$x,tau)
   } else {
     # For flat tariffs, inflexible and flexible loads are identical
-    bill_inflex <- sum(df$price * df$load)
-    bill_flex   <- bill_inflex
+    bill_inflex <- sum(df$price * df$load) + standing_charge
+    bill_flex   <- bill_inflex + standing_charge
     ramping_cost <- 0
     behavioural_cost <- 0
   }

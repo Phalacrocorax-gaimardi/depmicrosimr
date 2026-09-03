@@ -11,9 +11,9 @@ tariff_plan_bills(
   eta,
   tau,
   natural_profile = "LP1",
-  yeartime,
   smart_rollout,
-  prices_scen
+  prices_scen,
+  params
 )
 }
 \arguments{
@@ -29,11 +29,11 @@ tariff_plan_bills(
 
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
-\item{yeartime}{current decimal time}
-
 \item{smart_rollout}{smart meter rollout time}
 
 \item{prices_scen}{price scenario}
+
+\item{params}{scenario parameters at params$yeartime}
 }
 \value{
 dataframe
@@ -43,7 +43,8 @@ tariff_plan_bills
 }
 \examples{
 prices_scen <- set_prices(sD)
-tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2030,2025,prices_scen)
-tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2025.5,2025,prices_scen)
-tariff_plan_bills(8760,0.25,1,0.2,48,"LP1",2020,2025,prices_scen)
+params <- scenario_params(sD,2034)
+tariff_plan_bills(8760,phi=0.5,1,0.5,48,"LP1",2025,prices_scen,params)
+tariff_plan_bills(8760,phi=0.5,1,0.5,48,"LP1",2025,prices_scen,params)
+tariff_plan_bills(8760,phi=0.5,2,eta=0.5,48,"LP1",2025,prices_scen,params)
 }

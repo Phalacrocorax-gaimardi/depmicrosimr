@@ -5,7 +5,6 @@
 \title{get_annual_cost}
 \usage{
 get_annual_cost(
-  yeartime,
   kWh,
   tariff_plan,
   phi = 0.5,
@@ -13,12 +12,11 @@ get_annual_cost(
   eta = 0.1,
   tau = 24,
   natural_profile = "LP1",
-  prices_scen
+  prices_scen,
+  params
 )
 }
 \arguments{
-\item{yeartime}{decimal time}
-
 \item{kWh}{annual consumption kWh (assumed inflexible)}
 
 \item{tariff_plan}{flat, tou or dynamic}
@@ -34,6 +32,8 @@ get_annual_cost(
 \item{natural_profile}{characteristic household usage profile e.g. LP1}
 
 \item{prices_scen}{tariff price scenario}
+
+\item{params}{scenario environment object}
 }
 \value{
 a real number, euros
@@ -47,7 +47,8 @@ are typically the output of get_tariff_prices(scenario)
 \examples{
 
 prices_scen <- set_prices(sD)
-get_annual_cost(2026,8760,"tou",0.5,1,1,48,"LP1",prices_scen)
-get_annual_cost(2030,8760,"dynamic",0.25,1,0.2,96,"LP3",prices_scen) #
+params <- scenario_params(sD,2028)
+get_annual_cost(8760,"tou",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params)
+get_annual_cost(8760,"dynamic",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params) #
 get_annual_cost_simple(2030,8760,"dynamic","LP3",prices_scen) #
 }
