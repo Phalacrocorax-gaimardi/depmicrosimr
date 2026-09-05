@@ -9,7 +9,7 @@ initialise_agents(
   start_year = 2019,
   prices_scen,
   social_network,
-  eta = 0.5,
+  eta = 0.4,
   phi = 0.5
 )
 }

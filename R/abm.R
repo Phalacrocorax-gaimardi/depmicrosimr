@@ -39,7 +39,7 @@
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' initialise_agents(sD,2019,prices_scen,social_network,0.4,0.5)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.5,phi=0.5){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,phi=0.5){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
@@ -73,10 +73,14 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #add flex params
   agents_in$eta <- eta
   agents_in$phi <- phi
-  #generate "flexibility scores" (hourly MAD load-shifting index) range from min_flex to max_flex%
+  #generate "flexibility scores" (hourly load-shifting index) range
+  #map survey-derived score to beta distribution scaled to interval (0,max_flex)
+  #the value of max_flex depends on phi,eta. If eta is zero max_flex is 100*(1-phi). Finite eta further reduces max_flex, and th
+  #value is extracted from
   flex_alpha <- scen %>% dplyr::filter(parameter=="flex_alpha.") %>% dplyr::pull(value)
   flex_beta <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
-  #map survey flexibilities to 0,1-phi using Beta distribution
+  #map survey flexibilities to 0,1-max_flex using Beta distribution
+  max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr) %>% dplyr::filter(phi==0.5,eta==0.6) %>% dplyr::pull(flex_1hr)
   map_flex <- function(s) {
     # 1. Standardize s to uniform percentile U in (0, 1)
     u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
@@ -86,7 +90,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 
     # 3. Scale by available headroom
     #allow for the effect of eta in limiting flex_score range using empirical formula
-    return(100*(1 - 0.876*phi-0.27*eta) * y)
+    return(max_flex * y)
   }
   #compute 1hr implied flexibilities
   agents_in$flex_score_0 <- map_flex(agents_in$flexibility)
