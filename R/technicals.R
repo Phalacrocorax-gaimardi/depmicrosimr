@@ -570,7 +570,7 @@ sem_prices <- function(scen,end_year=2040){
 #' ff <-  flex_scores %>% dplyr::filter(eta==0.5,phi==0.6)
 flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 
-  train_data <- flex_scores %>% dplyr::filter(gamma >= 0.5) %>%
+  train_data <- flex_scores %>% #%>% dplyr::filter(gamma >= 0.5) %>%
     dplyr::filter(
       tariff_plan == "tou",
       eta == eta_targ,
@@ -621,8 +621,8 @@ flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.4,0.7)
-#' sapply(seq(1,70), function(f) match_flex_params(f,score_cube)$flex_score)
+#' score_cube <- flex_score_cube(0.4,0.5)
+#' sapply(seq(1,27), function(f) match_flex_params(f,score_cube)$flex_score)
 #'
 match_flex_params <- function(x,score_cube){
   #
