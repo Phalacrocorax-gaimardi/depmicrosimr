@@ -566,16 +566,13 @@ sem_prices <- function(scen,end_year=2040){
 #' @export
 #'
 #' @examples
-#' flex_score_cube(0.4,0.5) %>% dplyr::slice_max(flex_score)
+#' flex_score_cube(0.3,0.3) #%>% dplyr::slice_max(flex_score)
 #' ff <-  flex_scores %>% dplyr::filter(eta==0.5,phi==0.6)
-flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
+flex_score_cube <- function(eta_targ = 0.3, phi_targ = 0.6) {
 
-  train_data <- flex_scores %>% #%>% dplyr::filter(gamma >= 0.5) %>%
-    dplyr::filter(
-      tariff_plan == "tou",
-      eta == eta_targ,
-      phi == phi_targ
-    )
+  stopifnot(eta_targ %in% flex_scores$eta %>% unique() & phi_targ %in% flex_scores$phi %>% unique())
+
+  train_data <- flex_scores %>% dplyr::filter(tariff_plan == "tou",eta == eta_targ,phi == phi_targ)
 
   #pivot
   grid_wide <- train_data %>%
@@ -621,7 +618,7 @@ flex_score_cube <- function(eta_targ = 0.6, phi_targ = 0.5) {
 #' @export
 #'
 #' @examples
-#' score_cube <- flex_score_cube(0.4,0.5)
+#' score_cube <- flex_score_cube(0.3,0.8)
 #' sapply(seq(1,27), function(f) match_flex_params(f,score_cube)$flex_score)
 #'
 match_flex_params <- function(x,score_cube){

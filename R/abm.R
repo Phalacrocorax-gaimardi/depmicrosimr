@@ -38,7 +38,7 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network,0.5,0.5)
+#' initialise_agents(sD,2019,prices_scen,social_network,0.3,0.6)
 initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,phi=0.5){
 
   #agents_in has a minimal set of survey data

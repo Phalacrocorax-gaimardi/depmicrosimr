@@ -4,7 +4,7 @@
 \alias{flex_score_cube}
 \title{flex_score_cube}
 \usage{
-flex_score_cube(eta_targ = 0.6, phi_targ = 0.5)
+flex_score_cube(eta_targ = 0.3, phi_targ = 0.6)
 }
 \arguments{
 \item{eta_targ}{\eqn{eta} parameter assumption}
@@ -16,6 +16,6 @@ utility function used by \code{match_flex_params()}. \code{flex_score_cube()} re
 given input values for \eqn{\eta,\phi}. Flexibility is on a 1-hour measure.
 }
 \examples{
-flex_score_cube(0.4,0.5) \%>\% dplyr::slice_max(flex_score)
+flex_score_cube(0.3,0.3) #\%>\% dplyr::slice_max(flex_score)
 ff <-  flex_scores \%>\% dplyr::filter(eta==0.5,phi==0.6)
 }
