@@ -80,7 +80,9 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   flex_alpha <- scen %>% dplyr::filter(parameter=="flex_alpha.") %>% dplyr::pull(value)
   flex_beta <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
   #map survey flexibilities to 0,1-max_flex using Beta distribution
-  max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr) %>% dplyr::filter(phi==0.5,eta==0.6) %>% dplyr::pull(flex_1hr)
+  #max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr,n=1) %>% dplyr::filter(phi==phi,eta==eta) %>% dplyr::pull(flex_1hr)
+  max_flex <- flex_scores %>% dplyr::filter(phi == .env$phi, eta == .env$eta) %>% dplyr::slice_max(flex_1hr, n = 1, with_ties = FALSE) %>% dplyr::pull(flex_1hr)
+  print(max_flex)
   map_flex <- function(s) {
     # 1. Standardize s to uniform percentile U in (0, 1)
     u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
