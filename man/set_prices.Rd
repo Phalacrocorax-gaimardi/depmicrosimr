@@ -4,7 +4,7 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen, end_year = 2040, cru_cap = TRUE)
+set_prices(scen, end_year = 2040, cru_cap = TRUE, w = 1/3)
 }
 \arguments{
 \item{scen}{scenario}
@@ -12,13 +12,24 @@ set_prices(scen, end_year = 2040, cru_cap = TRUE)
 \item{end_year}{last full year for simulation}
 
 \item{cru_cap}{Boolean, defaults to TRUE}
+
+\item{w}{fraction of gains from flexibility that retail suppliers not passed on (default 1/3)}
 }
 \description{
-\code{set_prices()} is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges. The purpose of
+\code{set_prices()} is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
 this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
-prices with reasonable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
-on specific assumptions. This is equivalent to the assumption that network supplier set their prices so that the average price paid by
-customers on flat, ToU and dynamic prices are similar across standard profiles.\cr
+prices with reasonable accuracy. The \code{tariff_plan} are supposed to be broadly reflective of the market, rather than to mimic one particular
+supplier. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
+on specific assumptions.\cr
+\cr
+This is equivalent to the assumption that network supplier set their prices so that the average price paid by
+customers on flat, ToU and dynamic prices are related across standard profiles.The parameter \code{w} represents the fraction of gain
+from flexibility that is passed on to consumers. If the gain is passed on in full, then \eqn{p_{flat}=p_{tou}} where the weighted mean prices are calculated
+in the inflexible LP1 profile. In general however, \eqn{p_{flat} < p_{tou}} for inflexible customers, and therefore there is a potential
+cost from adopting variable pricing tariffs. For inflexible customers, \code{set_prices()} gives \eqn{p_{tou}\approx p_{dynamic} > p_{flat}}
+}
+\details{
+\cr
 \cr
 Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
 \code{peak_network_charge_fun(scen,yeartime)} etc. These are supposed to include supplier uplift, and other systems charges on top of the regulated network TUoS and DUos network charge. The model assumes that

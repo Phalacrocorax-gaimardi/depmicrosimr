@@ -6,9 +6,9 @@
 \usage{
 get_flex(
   demand,
-  phi = 0.5,
-  gamma = 0.5,
-  eta = 1,
+  phi = 0.4,
+  gamma = 5,
+  eta = 0.3,
   tau = 24,
   kernel = "exp",
   precision = 1e-04

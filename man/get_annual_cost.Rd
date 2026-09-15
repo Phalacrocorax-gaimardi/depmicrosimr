@@ -7,9 +7,9 @@
 get_annual_cost(
   kWh,
   tariff_plan,
-  phi = 0.5,
-  gamma = 0.25,
-  eta = 0.1,
+  phi = 0.4,
+  gamma = 5,
+  eta = 0.3,
   tau = 24,
   natural_profile = "LP1",
   prices_scen,

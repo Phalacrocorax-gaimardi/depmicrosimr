@@ -91,7 +91,6 @@ make_artificial_society <- function(society=society,homophily=homophily,nu=4.5){
 #'
 get_network_characteristics <- function(society, g){
 
-
   # 1. Pull the nodes directly out of the graph object 'g' to guarantee
   # they are in the exact structural order igraph expects.
   graph_nodes <- g %>% tidygraph::activate(nodes) %>% tibble::as_tibble()

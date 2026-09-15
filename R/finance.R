@@ -67,7 +67,7 @@
 #' demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
 #' test <- get_flex(demand,phi=0.5,gamma=1,eta=0.5,tau=48,kernel="exp")
 #' 100*sum(abs(test$load_opt-test$load))/8760
-get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="exp",precision=1e-4) {
+get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="exp",precision=1e-4) {
   # T = Total horizon in hours
   #if(dim(prices)[1] != dim(loads)[1]) stop("dimensions of prices and natural loads do not agree ")
   #print()
@@ -225,7 +225,7 @@ get_flex <- function(demand, phi = 0.5, gamma = 0.5, eta = 1,tau = 24,kernel="ex
 #' get_annual_cost(8760,"tou",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params)
 #' get_annual_cost(8760,"dynamic",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params) #
 #' get_annual_cost_simple(2030,8760,"dynamic","LP3",prices_scen) #
-get_annual_cost <- function(kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24,natural_profile="LP1", prices_scen,params) {
+get_annual_cost <- function(kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=24,natural_profile="LP1", prices_scen,params) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   yeartime <- params$yeartime
@@ -322,11 +322,19 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 
 #' set_prices
 #'
-#' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges. The purpose of
+#' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
 #' this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
-#' prices with reasonable accuracy. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
-#' on specific assumptions. This is equivalent to the assumption that network supplier set their prices so that the average price paid by
-#' customers on flat, ToU and dynamic prices are similar across standard profiles.\cr
+#' prices with reasonable accuracy. The \code{tariff_plan} are supposed to be broadly reflective of the market, rather than to mimic one particular
+#' supplier. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
+#' on specific assumptions.\cr
+#' \cr
+#' This is equivalent to the assumption that network supplier set their prices so that the average price paid by
+#' customers on flat, ToU and dynamic prices are related across standard profiles.The parameter \code{w} represents the fraction of gain
+#' from flexibility that is passed on to consumers. If the gain is passed on in full, then \eqn{p_{flat}=p_{tou}} where the weighted mean prices are calculated
+#' in the inflexible LP1 profile. In general however, \eqn{p_{flat} < p_{tou}} for inflexible customers, and therefore there is a potential
+#' cost from adopting variable pricing tariffs. For inflexible customers, \code{set_prices()} gives \eqn{p_{tou}\approx p_{dynamic} > p_{flat}}
+#'
+#' \cr
 #' \cr
 #' Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
 #' \code{peak_network_charge_fun(scen,yeartime)} etc. These are supposed to include supplier uplift, and other systems charges on top of the regulated network TUoS and DUos network charge. The model assumes that
@@ -341,13 +349,14 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #' @param scen scenario
 #' @param end_year last full year for simulation
 #' @param cru_cap Boolean, defaults to TRUE
+#' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
 #'
 #' @returns
 #' @export
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3){
   #
   midyear <- function(year,tou_band) {
     #a function to identify the decimal date "mid_year" for day/night/peak hours
@@ -374,29 +383,35 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE){
 
   #dynamic prices
   dyn_prices <- prices %>% dplyr::select(datetime,tou_band,price) %>% dplyr::mutate(tariff_plan="dynamic")
+  dyn_prices <- dyn_prices %>% dplyr::inner_join(load_profiles_generalised)
   #################################
   # a somewhat speculative guess about how network suppliers arrive at their flat tariff (commodity swap price)
   # mean flat prices paid by year
   #################################
-  flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price),dynamic_lp2=sum(lp2*price),
-                                                                        dynamic_lp3=sum(lp3*price),dynamic_lp4=sum(lp4*price))
+  #flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price),dynamic_lp2=sum(lp2*price),
+  #                                                                     dynamic_lp3=sum(lp3*price),dynamic_lp4=sum(lp4*price))
+  flat_prices <- dyn_prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(price=(1-w)*sum(lp1*price)+w*sum(lp2*price))
+
   #average over load profiles
-  flat_prices <- flat_prices %>% tidyr::pivot_longer(-year,names_to="profile",values_to="price")
+  #flat_prices <- flat_prices %>% tidyr::pivot_longer(-year,names_to="profile",values_to="price")
   flat_prices <- flat_prices %>% dplyr::group_by(year) %>% dplyr::summarise(price=mean(price))
   flat_prices <- flat_prices %>% dplyr::inner_join(tidyr::expand_grid(year=flat_prices$year,tou_band=c("day","night","peak")),by="year")
   flat_prices <- flat_prices %>% dplyr::mutate(yeartime=midyear(year,tou_band)) %>% dplyr::ungroup() %>% dplyr::select(-year)
-
   flat_prices <- flat_prices %>% dplyr::mutate(tariff_plan="flat")
+  #flat_prices <- flat_prices %>% dplyr::mutate(price=price*(1+risk_premium_flat)+margin)
   #tou prices
-  tou_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime),tou_band) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price)/sum(lp1),dynamic_lp2=sum(lp2*price)/sum(lp2),
-                                                                              dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
+  #tou_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime),tou_band) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price)/sum(lp1),dynamic_lp2=sum(lp2*price)/sum(lp2),
+  #                                                                            dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
   #
-  tou_prices <- tou_prices %>% tidyr::pivot_longer(c(-year,-tou_band),names_to="profile",values_to="price")
+  tou_prices <- dyn_prices %>% dplyr::group_by(year=lubridate::year(datetime),tou_band) %>% dplyr::summarise(price=w*sum(lp1*price)/sum(lp1)+(1-w)*sum(lp2*price)/sum(lp2))
+                                                                                                         #                                                                            dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
+  #tou_prices <- tou_prices %>% tidyr::pivot_longer(c(-year,-tou_band),names_to="profile",values_to="price")
   tou_prices <- tou_prices %>% dplyr::group_by(year,tou_band) %>% dplyr::summarise(price=mean(price)) %>% dplyr::ungroup()
   #key yeartimes (taking July 2 as middle day)
 
   tou_prices <- tou_prices %>% dplyr::mutate(yeartime=midyear(year,tou_band)) %>% dplyr::ungroup() %>% dplyr::select(-year)
   tou_prices <- tou_prices %>% dplyr::mutate(tariff_plan="tou")
+  #tou_prices <- tou_prices %>% dplyr::mutate(price=price*(1+risk_premium_tou)+margin)
 
   ts <- prices %>% dplyr::select(datetime,tou_band) %>% dplyr::mutate(yeartime=lubridate::decimal_date(datetime))
   #
@@ -408,7 +423,7 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE){
   tou_prices <- ts %>% dplyr::left_join(tou_prices,by=c("tou_band","yeartime")) %>% dplyr::arrange(tou_band,yeartime) %>% dplyr::group_by(tou_band) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
   tou_prices$tariff_plan <- "tou"
   tou_prices <- tou_prices %>% dplyr::select(-yeartime)
-
+  dyn_prices <- dyn_prices %>% dplyr::select(datetime,tou_band,price,tariff_plan) #%>% dplyr::mutate(price=price+margin)
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
   #apply VAT to all prices
   result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tou_band),by="datetime")

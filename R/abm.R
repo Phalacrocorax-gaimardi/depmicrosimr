@@ -38,8 +38,8 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' initialise_agents(sD,2019,prices_scen,social_network,0.3,0.6)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.4,phi=0.5){
+#' initialise_agents(sD,2019,prices_scen,social_network,0.3,0.4)
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.3,phi=0.4){
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
@@ -63,7 +63,6 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   area_codes <- area_codes %>% dplyr::mutate(area=dplyr::if_else(qg %in% c(1,3),"Rural","Urban"))
   agents_in <- agents_in %>% dplyr::inner_join(area_codes,by="qg") %>% dplyr::inner_join(county_codes,by="qc1")
   agents_in <- agents_in %>% dplyr::inner_join(smart_meter_rollout,by=c("area","county"))
-  #impute missing network degrees
 
 
   agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff_plan,rollout,area)
@@ -82,7 +81,6 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #map survey flexibilities to 0,1-max_flex using Beta distribution
   #max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr,n=1) %>% dplyr::filter(phi==phi,eta==eta) %>% dplyr::pull(flex_1hr)
   max_flex <- flex_scores %>% dplyr::filter(phi == .env$phi, eta == .env$eta) %>% dplyr::slice_max(flex_1hr, n = 1, with_ties = FALSE) %>% dplyr::pull(flex_1hr)
-  print(max_flex)
   map_flex <- function(s) {
     # 1. Standardize s to uniform percentile U in (0, 1)
     u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
@@ -117,14 +115,28 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in <- agents_in  %>% dplyr::mutate(annual_bill = purrr::pmap_dbl(list(kWh, tariff_plan, profile), get_bill))
   #tidy up
   agents_in$serial <- as.character(agents_in$serial)
+  #there are no dynamic adopters
   agents_in$q_dyn <- 0
-  #add the network degree
-  agents_in <- agents_in %>% dplyr::inner_join(tibble::as_tibble(social_network) %>% dplyr::select(serial,degree),by="serial")
-  print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
+  #there are tou adopters
+  agents_in <- agents_in %>% dplyr::mutate(tou_adopter=(tariff_plan=="tou_old"))
+  #a_s <- a_s %>% dplyr::mutate(kW=heating_system_size(ber*floor_area))
+  #recompute social variable
+  ma <- igraph::as_adjacency_matrix(social_network)
+  g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(agents_in,by="serial")
+  #social network conformity effect
+  tou_adopter_nodes  <- igraph::V(g)$tou_adopter==TRUE
+  agents_in$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
+  agents_in$degree <- igraph::degree(g)
+  #add survey the network degree if desired
+  #agents_in <- agents_in %>% dplyr::inner_join(tibble::as_tibble(social_network) %>% dplyr::select(serial,degree),by="serial")
+  #print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
+  median_flex_score <- agents_in
   weighted_mean <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  print(paste("weighted mean of household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
-  print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
-  agents_in %>% dplyr::select(-flex_score_0) %>% return()
+  print(paste("The maximum possible initial flexibility is ",round(max_flex,0),"%",sep=""))
+  print(paste("median household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
+  print(paste("weighted mean of household flexibilities", round(median(agents_in$flex_score),1)))
+  #print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
+  agents_in %>% dplyr::select(-flex_score_0,-tou_adopter) %>% return()
   #agents_in %>% return()
 }
 
@@ -156,7 +168,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
-#' #agents_1 <- update_agents(sD,2026+1/6,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
+#' #agents_1 <- update_agents(sD,2027,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
@@ -223,11 +235,14 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
     to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
     unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
 
-    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,degree,q_dyn,...) {
+    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
       c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
-      c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+      c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
       #adjust ce_det according to share of associates who have adopted dynamic
-      c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect
+      c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value) #social effect drives c_tou to c_tou_max
+      c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_det) #social effect drives c_dyn to c_det
+      #dynamic confidence increases but does not exceed the prevailing c_tou
+      c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
       result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,prices_scen,params)
       # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
       # flat is the deferred retrospective piece, not decided here)
@@ -269,22 +284,25 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   #update agents with switchers
   a_s <- dplyr::filter(a_s, !(serial %in% b_s_3$serial))
   a_s <- dplyr::bind_rows(a_s,b_s_3) %>% dplyr::arrange(serial)
-  a_s <- a_s %>% dplyr::mutate(dep_adopter=(tariff_plan=="dynamic"))
+  a_s <- a_s %>% dplyr::mutate(dep_adopter=(tariff_plan=="dynamic"),tou_adopter=(tariff_plan=="tou"))
   #a_s <- a_s %>% dplyr::mutate(kW=heating_system_size(ber*floor_area))
   #recompute social variable
   ma <- igraph::as_adjacency_matrix(social_network)
   g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(a_s,by="serial")
   #social network conformity effect
-  adopter_nodes <- igraph::V(g)$dep_adopter==TRUE
-  a_s$q_dyn <- as.numeric(ma %*% adopter_nodes) #social reinforcement 0 no adoption 1 adoption
+  dep_adopter_nodes <- igraph::V(g)$dep_adopter==TRUE
+  tou_adopter_nodes  <- igraph::V(g)$tou_adopter==TRUE
+  a_s$q_dyn <- as.numeric(ma %*% dep_adopter_nodes) #social reinforcement 0 no adoption 1 adoption
+  a_s$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
   if(ignore_social) a_s$q_dyn <- 0 #no adopters assumed present in local network
+  if(ignore_social) a_s$q_tou <- 0
   #a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(q52 = min(q52+1,4)) #update q52 encoding 1,2,3,4
   #agents_out <- a_s
   #a_s <- a_s %>% dplyr::select(-du_tot)
   if(!quiet) {
     print(paste("time", round(yeartime,1), "number of switchers",dim(b_s)[1]))
     }
-  a_s <- a_s %>% dplyr::select(-dep_adopter)
+  a_s <- a_s %>% dplyr::select(-dep_adopter,-tou_adopter)
   return(dplyr::ungroup(a_s))
 }
 
