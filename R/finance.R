@@ -366,7 +366,8 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3){
   )}
   #sem prices
   #prices <- get_price_load_scen(scen) %>% dplyr::select(-tou)
-  prices <- sem_prices(scen,end_year) %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
+  wholesale <-  sem_prices(scen,end_year)
+  prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
 
   #prices <- prices %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou_tariffs %>% dplyr::rename("hour"=start),by="hour") %>% dplyr::rename("sem"=price)
 
@@ -426,7 +427,7 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3){
   dyn_prices <- dyn_prices %>% dplyr::select(datetime,tou_band,price,tariff_plan) #%>% dplyr::mutate(price=price+margin)
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
   #apply VAT to all prices
-  result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tou_band),by="datetime")
+  result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tou_band),by="datetime") %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state))
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price) %>% dplyr::select(-tou_band,-yeartime)
 }
 

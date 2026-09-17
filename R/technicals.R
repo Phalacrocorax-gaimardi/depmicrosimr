@@ -381,12 +381,12 @@ generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 
   x <- dcmp_clipped$remainder
 
-  # 2. Define Initial Parameters for HiddenMarkov
-  # Initial state transition matrix (high diagonal probability = state persistence)
+  # initial parameters for HiddenMarkov
+  # initial tranistion matrix guess
   Pi <- matrix((1 - 0.8) / (n_states - 1), nrow = n_states, ncol = n_states)
   diag(Pi) <- 0.8
 
-  # Initial state probabilities (uniform)
+  # flat state probabilities
   delta <- rep(1 / n_states, n_states)
 
   # Initial distribution parameters (means evenly spread across data quantiles)
@@ -407,7 +407,6 @@ generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 
   # BaumWelch is the EM algorithm
   hmm_fit <- HiddenMarkov::BaumWelch(model)
-
   Pi <- hmm_fit$Pi
   delta <- hmm_fit$delta
   mu <- hmm_fit$pm$mean
@@ -417,9 +416,9 @@ generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 
 }
 
-#' simulate hmm
+#' simulate_hmm
 #'
-#' Utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
+#' A utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
 #'
 #' @param n_steps length of time-series
 #' @param hmm_fit listof HMM parameters
@@ -433,12 +432,12 @@ generate_logprice_hmm <- function(dcmp, n_states = 3, winsor = 0.01) {
 simulate_hmm <- function(n_steps, hmm_fit) {
   # 1. Pre-allocate the state vector for speed
   states <- integer(n_steps)
-
+  #
   n_states <- dim(hmm_fit$pi_mat)[1]
-  # 2. Draw the first state using initial probabilities (delta)
+  #first state using initial probabilities (delta)
   states[1] <- sample(1:n_states, size = 1, prob = hmm_fit$delta)
 
-  # 3. Loop to draw subsequent states using the transition matrix (Pi)
+  #loop to draw subsequent states using the transition matrix (Pi)
   # Base R loops are very fast for sequences of this size (~130k hours)
   for (t in 2:n_steps) {
     states[t] <- sample(1:n_states, size = 1, prob = hmm_fit$pi_mat[states[t-1], ])
@@ -446,7 +445,7 @@ simulate_hmm <- function(n_steps, hmm_fit) {
   # 4. Vectorized draw of emissions (simulated prices) based on the state sequence
   sim_series <- rnorm(n_steps, mean = hmm_fit$mu[states], sd = hmm_fit$sigma[states])
 
-  return(sim_series)
+  return(list("simulation"=sim_series,"states"=states))
 }
 
 #' sem_prices
@@ -465,10 +464,12 @@ simulate_hmm <- function(n_steps, hmm_fit) {
 #' a log transformation for prices greater than \eqn{scale}.
 #' pre 2026\cr
 #'
+#'
+#'
 #' @param scen scenario e.g. sD
 #' @param end_year end year
 #'
-#' @returns dataframe with columns datetime, price (euros/kWh)
+#' @returns dataframe with columns datetime, price (euros/kWh), period, and HMM "state"
 #' @export
 #'
 #' @examples
@@ -481,10 +482,10 @@ sem_prices <- function(scen,end_year=2040){
   t2 <- lubridate::ymd_hms(paste(end_year,"-12-31 23:00:00", tz = "UTC", sep=""))
   # 2. Generate the hourly equence using base R's seq() with lubridate's hours(1)
   hourly_sequence <- seq(from = t1, to = t2, by = "1 hour")
-
+  #
   sim_length <- length(hourly_sequence)
   sim_series <- simulate_hmm(sim_length, depmicrosimr::hmm_fit)
-  sim_logprices <-  tibble::tibble(datetime=hourly_sequence,sim=sim_series)
+  sim_logprices <-  tibble::tibble(datetime=hourly_sequence,sim=sim_series$simulation)
   #seasonal factors
   daily_lookup <- sem_logprices_2019_2025_decomp %>% tibble::as_tibble() %>%
     # Identify unique hour of the week (1 to 24)
@@ -547,9 +548,11 @@ sem_prices <- function(scen,end_year=2040){
 
   sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)/1000) %>% dplyr::select(datetime,price)
   sim_prices$regime <- "simulated"
+  sim_prices$hmm_state <-  sim_series$state
   #scale all price by dynamic scale
   hist <- sem_logprices_2019_2025_decomp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
   hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)/1000) %>% dplyr::select(-logprice)
+  hist <- hist %>% dplyr::inner_join(sem_states_2019_2025, by="datetime")
   hist %>% dplyr::bind_rows(sim_prices) %>% dplyr::rename("sem_price"=price)
 
 }

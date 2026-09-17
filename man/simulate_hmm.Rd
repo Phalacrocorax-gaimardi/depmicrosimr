@@ -2,7 +2,7 @@
 % Please edit documentation in R/technicals.R
 \name{simulate_hmm}
 \alias{simulate_hmm}
-\title{simulate hmm}
+\title{simulate_hmm}
 \usage{
 simulate_hmm(n_steps, hmm_fit)
 }
@@ -15,7 +15,7 @@ simulate_hmm(n_steps, hmm_fit)
 vector of values of length n_steps
 }
 \description{
-Utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
+A utility function to simulate hidden markov time-series in base R. Used by \code{sem_prices()}.
 }
 \examples{
 simulate_hmm(100,hmm_fit)

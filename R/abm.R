@@ -82,13 +82,13 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr,n=1) %>% dplyr::filter(phi==phi,eta==eta) %>% dplyr::pull(flex_1hr)
   max_flex <- flex_scores %>% dplyr::filter(phi == .env$phi, eta == .env$eta) %>% dplyr::slice_max(flex_1hr, n = 1, with_ties = FALSE) %>% dplyr::pull(flex_1hr)
   map_flex <- function(s) {
-    # 1. Standardize s to uniform percentile U in (0, 1)
+    #standardize s to uniform percentile U in (0, 1)
     u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
 
-    # 2. Map percentile through Beta quantile function (smooth, no clipping)
+    #map percentile through Beta quantile function (smooth, no clipping)
     y <- qbeta(u, shape1 = flex_alpha, shape2 = flex_beta)
 
-    # 3. Scale by available headroom
+    #scale by available headroom
     #allow for the effect of eta in limiting flex_score range using empirical formula
     return(max_flex * y)
   }

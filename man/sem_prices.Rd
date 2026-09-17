@@ -12,7 +12,7 @@ sem_prices(scen, end_year = 2040)
 \item{end_year}{end year}
 }
 \value{
-dataframe with columns datetime, price (euros/kWh)
+dataframe with columns datetime, price (euros/kWh), period, and HMM "state"
 }
 \description{
 \code{sem_prices()} returns a simulation of wholesale (sem) prices to end_year in a scenario. The period 2019-2025 uses historic prices. \cr
