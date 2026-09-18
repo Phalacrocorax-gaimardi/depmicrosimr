@@ -92,12 +92,15 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
     #allow for the effect of eta in limiting flex_score range using empirical formula
     return(max_flex * y)
   }
+  max_lambda <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
+  min_lambda <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
+  #
   #compute 1hr implied flexibilities
   agents_in$flex_score_0 <- map_flex(agents_in$flexibility)
   score_cube <- flex_score_cube(eta,phi)
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score_0,score_cube)) %>% dplyr::ungroup()
-  theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
-  agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
+  #theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
+  #agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
   #assign natural profile codes : currently only an urban/rural profile
   agents_in <- agents_in %>% dplyr::mutate(natural_profile=dplyr::case_when(area=="Urban"~"lp1",
                                                                     area=="Rural"~"lp3"))
@@ -232,8 +235,8 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
     # only flat/tou agents are evaluated this pass -- dynamic agents are left untouched
     # IS THIS REALISTIC?
     # (full retrospective re-evaluation for tou/dynamic households is the deferred piece)
-    to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
-    unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
+    #to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
+    #unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
 
     evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
       c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
@@ -255,8 +258,8 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
                      CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
     }
 
-    if (nrow(to_evaluate) > 0) {
-      to_evaluate <- to_evaluate %>%
+    #if (nrow(to_evaluate) > 0) {
+    b_s_3 <- b_s %>%
         # CHANGED (bug fix): drop any CE_tou/CE_det carried over from a previous timestep's
         # evaluation before this -- tidyr::unnest() errors if the list-column being unnested
         # (eval_data, which also has CE_tou/CE_det) shares names with existing columns.
@@ -266,17 +269,17 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
         dplyr::mutate(eval_data = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
         tidyr::unnest(eval_data) %>%
         dplyr::select(-current_plan)
-    } else {
-      to_evaluate$CE_tou <- NA_real_
-      to_evaluate$CE_det <- NA_real_
-      to_evaluate <- to_evaluate %>% dplyr::select(-current_plan)
-    }
+    #} else {
+    #  to_evaluate$CE_tou <- NA_real_
+    #  to_evaluate$CE_det <- NA_real_
+     #  to_evaluate <- to_evaluate %>% dplyr::select(-current_plan)
+    #}
 
-    unchanged$CE_tou <- NA_real_
-    unchanged$CE_det <- NA_real_
-    unchanged <- unchanged %>% dplyr::select(-current_plan)
+    #unchanged$CE_tou <- NA_real_
+    #unchanged$CE_det <- NA_real_
+    #unchanged <- unchanged %>% dplyr::select(-current_plan)
 
-    b_s_3 <- dplyr::bind_rows(to_evaluate, unchanged)
+    #b_s_3 <- dplyr::bind_rows(to_evaluate, unchanged)
   }
 
 
@@ -335,11 +338,11 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
-  p. <- scen %>% dplyr::filter(parameter=="p.") %>% dplyr::pull(value)/10 #inertia
-  nu. <- scen %>% dplyr::filter(parameter=="nu.") %>% dplyr::pull(value) #social
-  theta. <-  scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
+  p. <- scen %>% dplyr::filter(parameter=="p.") %>% dplyr::pull(value) #inertia
+  #nu. <- scen %>% dplyr::filter(parameter=="nu.") %>% dplyr::pull(value) #social
+  #theta. <-  scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
   #
-  print(paste("inertia (nu.)=",round(nu.,2),"p.=",round(p.,4),"theta.=",round(theta.,3)))
+  print(paste("p.=",round(p.,4)))
   #seai_elec <- pvbessmicrosimr::seai_elec
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
@@ -422,7 +425,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
 
     closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","nu.","theta.","model"),value=c(Nrun,simulation_end,p.,nu.,theta.,behavioural_model))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model"),value=c(Nrun,simulation_end,p.,behavioural_model))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
