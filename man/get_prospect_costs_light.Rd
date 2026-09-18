@@ -65,6 +65,6 @@ yet available are \code{NA}; their profiles are simply absent from the returned 
 # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2031)
-get_prospect_costs_light(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", smart_rollout = 2020, prices_scen,params)
+get_prospect_costs_light(kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020, prices_scen,params)
 
 }

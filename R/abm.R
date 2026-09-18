@@ -21,7 +21,7 @@
 #' Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12% of households.
 #' \cr
 #' \cr
-#' The nework input is used to determine the social degree of each agent.
+#' The network input is used to determine the social degree of each agent (correlated with but not identical to the stated degree).
 #'
 #'
 #'
@@ -66,7 +66,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 
 
   agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff_plan,rollout,area)
-  #combine with structural params
+  #combine with structural params (inertia, proactive,flexibility)
   agents_in <- agents_in %>% dplyr::inner_join(struct_params)
   #rollout year
   #add flex params
@@ -78,29 +78,38 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #value is extracted from
   flex_alpha <- scen %>% dplyr::filter(parameter=="flex_alpha.") %>% dplyr::pull(value)
   flex_beta <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
+  loss_alpha <- scen %>% dplyr::filter(parameter=="loss_alpha.") %>% dplyr::pull(value)
+  loss_beta <- scen %>% dplyr::filter(parameter=="loss_beta.") %>% dplyr::pull(value)
   #map survey flexibilities to 0,1-max_flex using Beta distribution
   #max_flex <- flex_scores %>% dplyr::group_by(phi,eta) %>% dplyr::slice_max(flex_1hr,n=1) %>% dplyr::filter(phi==phi,eta==eta) %>% dplyr::pull(flex_1hr)
   max_flex <- flex_scores %>% dplyr::filter(phi == .env$phi, eta == .env$eta) %>% dplyr::slice_max(flex_1hr, n = 1, with_ties = FALSE) %>% dplyr::pull(flex_1hr)
-  map_flex <- function(s) {
+  max_lambda <- scen %>% dplyr::filter(parameter=="pt_max_loss_aversion") %>% dplyr::pull(value)
+  min_lambda <- scen %>% dplyr::filter(parameter=="pt_min_loss_aversion") %>% dplyr::pull(value)
+  #
+  map_to_beta <- function(s,alpha,beta,min_val,max_val){
     #standardize s to uniform percentile U in (0, 1)
     u <- pnorm(s, mean = mean(s, na.rm = TRUE), sd = sd(s, na.rm = TRUE))
 
     #map percentile through Beta quantile function (smooth, no clipping)
-    y <- qbeta(u, shape1 = flex_alpha, shape2 = flex_beta)
+    y <- qbeta(u, shape1 = alpha, shape2 = beta)
 
     #scale by available headroom
     #allow for the effect of eta in limiting flex_score range using empirical formula
-    return(max_flex * y)
+    return(min_val+(max_val-min_val) * y)
   }
-  max_lambda <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
-  min_lambda <- scen %>% dplyr::filter(parameter=="flex_beta.") %>% dplyr::pull(value)
-  #
   #compute 1hr implied flexibilities
-  agents_in$flex_score_0 <- map_flex(agents_in$flexibility)
+  agents_in$flexibility <- agents_in$flexibility * (1 + rnorm(length(agents_in$flexibility), 0, 0.05))
+  agents_in$inertia <- agents_in$inertia * (1 + rnorm(length(agents_in$inertia), 0, 0.05))
+
+  agents_in$flex_score_0 <- map_to_beta(agents_in$flexibility, flex_alpha,flex_beta,0,max_flex)
+  agents_in$lambda <- map_to_beta(agents_in$inertia, loss_alpha,loss_beta,min_lambda,max_lambda)
+
   score_cube <- flex_score_cube(eta,phi)
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score_0,score_cube)) %>% dplyr::ungroup()
   #theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
   #agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
+  agents_in <0
+
   #assign natural profile codes : currently only an urban/rural profile
   agents_in <- agents_in %>% dplyr::mutate(natural_profile=dplyr::case_when(area=="Urban"~"lp1",
                                                                     area=="Rural"~"lp3"))
@@ -143,7 +152,6 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #agents_in %>% return()
 }
 
-
 #' update_agents
 #'
 #' micro-simulation time-step updater\cr
@@ -171,7 +179,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
-#' #agents_1 <- update_agents(sD,2027,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
+#' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
@@ -238,7 +246,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
     #to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
     #unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
 
-    evaluate_one <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
+    evaluate_one <- function(kWh,phi,gamma,eta,tau,lambda,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
       c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
       c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
       #adjust ce_det according to share of associates who have adopted dynamic
@@ -246,10 +254,10 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
       c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_det) #social effect drives c_dyn to c_det
       #dynamic confidence increases but does not exceed the prevailing c_tou
       c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
-      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,prices_scen,params)
+      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
       # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
-      # flat is the deferred retrospective piece, not decided here)
-      new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
+      #new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
+      new_plan <- result$decision
       new_bill <- switch(new_plan,
                          flat    = result$costs$flat,
                          tou     = result$costs$tou_flex,

@@ -48,7 +48,7 @@ in flexibility is described by \eqn{\phi-\tau} parameter pair. In general the ag
 Start year (default 2019) is assumed to be before the beginning smart meter rollout. The old day/night dual-metering system ("tou_old") is used by about 12\% of households.
 \cr
 \cr
-The nework input is used to determine the social degree of each agent.
+The network input is used to determine the social degree of each agent (correlated with but not identical to the stated degree).
 }
 \examples{
 prices_scen <- set_prices(sD)

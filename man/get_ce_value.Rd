@@ -12,7 +12,8 @@ get_ce_value(
   det_noflex,
   det_flex,
   flex_certainty_tou = 0.8,
-  flex_certainty_det = 0.7
+  flex_certainty_det = 0.7,
+  lambda = 2.25
 )
 }
 \arguments{
@@ -32,6 +33,8 @@ the plan-specific certainty-of-flex values (\code{pt_certainty_flex_tou}, \code{
 \item{flex_certainty_tou}{flexibility outcome confidence tou}
 
 \item{flex_certainty_det}{flexibility outcome confidence det}
+
+\item{lambda}{loss aversion (median 2.25)}
 }
 \value{
 a list: \code{flat}, \code{certainty_tou}, \code{CE_tou}, \code{CE_bill_tou},
@@ -54,6 +57,6 @@ the guaranteed saving a household would consider exactly as good as the actual u
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2032)
-costs <- get_prospect_costs_light(8760, 0.25, 1, 0.2, 48, "LP1", 2025, prices_scen,params)
-get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex)
+costs <- get_prospect_costs_light(8760, 0.4, 5, 0.3, 48, "LP1", 2025, prices_scen,params)
+get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.8,0.7,2.25)
 }

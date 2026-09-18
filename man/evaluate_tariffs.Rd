@@ -15,6 +15,7 @@ evaluate_tariffs(
   smart_rollout,
   flex_certainty_tou = 0.8,
   flex_certainty_det = 0.7,
+  lambda = 2.25,
   prices_scen,
   params
 )
@@ -40,6 +41,8 @@ evaluate_tariffs(
 
 \item{flex_certainty_det}{confidence in det flexibility}
 
+\item{lambda}{loss aversion}
+
 \item{prices_scen}{price scenario}
 
 \item{params}{parameters at params$yeartime}
@@ -58,5 +61,5 @@ Agents' prospect-theory evaluation of the initial fixed to flexible switching de
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2032)
-evaluate_tariffs(sD,kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", smart_rollout = 2025,0.8,0.7,prices_scen = prices_scen,params)
+evaluate_tariffs(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.6,0.5,10.25,prices_scen = prices_scen,params)
 }
