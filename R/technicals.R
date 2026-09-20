@@ -468,14 +468,16 @@ simulate_hmm <- function(n_steps, hmm_fit) {
 #'
 #' @param scen scenario e.g. sD
 #' @param end_year end year
+#' @param shock if TRUE add a price shock, details in description
 #'
 #' @returns dataframe with columns datetime, price (euros/kWh), period, and HMM "state"
 #' @export
 #'
 #' @examples
 #' sem_prices(sD)
+#' sem_prices(sD,shock=TRUE)
 #'
-sem_prices <- function(scen,end_year=2040){
+sem_prices <- function(scen,end_year=2040,shock=FALSE){
   #
   scale0 <- scen %>% dplyr::filter(parameter=="s.") %>% dplyr::pull(value)
   t1 <- lubridate::ymd_hms("2026-01-01 00:00:00", tz = "UTC")
@@ -531,8 +533,8 @@ sem_prices <- function(scen,end_year=2040){
   ###########
   #trend prices
   ############
-  sem_trend_price_2030 <- scen %>% dplyr::filter(parameter=="sem_price_2030") %>% dplyr::pull(value)*1000
-  sem_trend_price_2040 <- scen %>% dplyr::filter(parameter=="sem_price_2040") %>% dplyr::pull(value)*1000
+  sem_trend_price_2030 <- scen %>% dplyr::filter(parameter=="sem_price_2030") %>% dplyr::pull(value)
+  sem_trend_price_2040 <- scen %>% dplyr::filter(parameter=="sem_price_2040") %>% dplyr::pull(value)
 
   trend_logprices <- tibble::tibble(datetime=hourly_sequence,trend=NA)
   trend_logprice_2026 <- sem_logprices_2019_2025_decomp %>% dplyr::filter(datetime=="2025-12-01 23:00:00") %>% dplyr::pull(trend)
@@ -543,15 +545,25 @@ sem_prices <- function(scen,end_year=2040){
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2040-12-31 23:00:00",asinh(sem_trend_price_2040/scale0)))
   #linearly interp
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
+  #optionally add a wholesale price shock in 2030 modelled as a half exponential
+  if(shock) {
+    shock_time <- lubridate::ymd_hms("2030-01-01 00:00:00")
+    shock_strength <- 4
+    logp0 <- dplyr::filter(trend_logprices, datetime==shock_time) %>% dplyr::pull(trend)
+    p_shock <- shock_strength*scale0*sinh(logp0)
+    dlogp <- asinh(p_shock/scale0)-asinh(p_shock/scale0/shock_strength)
+    shock_timeconstant <- 8760
+    trend_logprices <- trend_logprices %>% dplyr::mutate(trend=trend+ifelse(datetime < shock_time,0, dlogp*exp(-(lubridate::time_length(lubridate::interval( shock_time,datetime), "hours"))/shock_timeconstant)))
 
+  }
   sim_logprices <- sim_logprices %>% dplyr::inner_join(trend_logprices,by="datetime") %>% dplyr::inner_join(seasonal_logprices,by="datetime")
 
-  sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)/1000) %>% dplyr::select(datetime,price)
+  sim_prices <- sim_logprices %>% dplyr::mutate(price=scale0*sinh(sim+trend+season)) %>% dplyr::select(datetime,price)
   sim_prices$regime <- "simulated"
   sim_prices$hmm_state <-  sim_series$state
   #scale all price by dynamic scale
   hist <- sem_logprices_2019_2025_decomp %>% dplyr::select(datetime,logprice) %>% dplyr::mutate(regime="historical")
-  hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)/1000) %>% dplyr::select(-logprice)
+  hist <- hist %>% dplyr::mutate(price= scale0*sinh(logprice)) %>% dplyr::select(-logprice)
   hist <- hist %>% dplyr::inner_join(sem_states_2019_2025, by="datetime")
   hist %>% dplyr::bind_rows(sim_prices) %>% dplyr::rename("sem_price"=price)
 

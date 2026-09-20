@@ -350,13 +350,14 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #' @param end_year last full year for simulation
 #' @param cru_cap Boolean, defaults to TRUE
 #' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
+#' @param shock if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030
 #'
 #' @returns
 #' @export
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3,shock=FALSE){
   #
   midyear <- function(year,tou_band) {
     #a function to identify the decimal date "mid_year" for day/night/peak hours
@@ -366,7 +367,7 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3){
   )}
   #sem prices
   #prices <- get_price_load_scen(scen) %>% dplyr::select(-tou)
-  wholesale <-  sem_prices(scen,end_year)
+  wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
 
   #prices <- prices %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou_tariffs %>% dplyr::rename("hour"=start),by="hour") %>% dplyr::rename("sem"=price)

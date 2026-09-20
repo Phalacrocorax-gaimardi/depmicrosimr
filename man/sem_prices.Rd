@@ -4,12 +4,14 @@
 \alias{sem_prices}
 \title{sem_prices}
 \usage{
-sem_prices(scen, end_year = 2040)
+sem_prices(scen, end_year = 2040, shock = FALSE)
 }
 \arguments{
 \item{scen}{scenario e.g. sD}
 
 \item{end_year}{end year}
+
+\item{shock}{if TRUE add a price shock, details in description}
 }
 \value{
 dataframe with columns datetime, price (euros/kWh), period, and HMM "state"
@@ -31,5 +33,6 @@ pre 2026\cr
 }
 \examples{
 sem_prices(sD)
+sem_prices(sD,shock=TRUE)
 
 }
