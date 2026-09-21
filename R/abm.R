@@ -335,6 +335,8 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @param use_parallel if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.
 #' @param ignore_social if TRUE ignore social network effects. Default is FALSE
 #' @param behavioural_model choose "classic" or "prospect" (default)
+#' @param shock if TRUE a 2030 x4 shock is included
+#' @param w (1-w) is flexibility pass-through
 #' @param quiet if TRUE messaging is reduced
 #'
 #' @return a three component list - simulation output, scenario setup, meta-parameters
@@ -342,7 +344,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="prospect",n_unused_cores=2, use_parallel=T,ignore_social=F, quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="prospect",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=1/3,quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
@@ -355,10 +357,10 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
   #single worker (abm run idex j)
-  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,quiet){
+  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,shock,w,quiet){
 
     print(paste("Generating price simulation for run",j,"...."))
-    prices_scen <- set_prices(scen)
+    prices_scen <- set_prices(scen,cru_cap = TRUE,w = w,shock=shock)
     #
     print(paste("Generating social network for run",j,"...."))
     if(!resample_society) social <- make_artificial_society(dep_society_1,homophily,4.5)
@@ -404,6 +406,8 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                  resample_society = resample_society,
                                  behavioural_model=behavioural_model,
                                  ignore_social = ignore_social,
+                                 shock=shock,
+                                 w=w,
                                  quiet = quiet)
       parallel::stopCluster(cl)
     }
@@ -428,12 +432,14 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                     resample_society = resample_society,
                                     ignore_social = ignore_social,
                                     behavioural_model=behavioural_model,
+                                    shock=shock,
+                                    w=w,
                                     quiet = quiet)
 
 
     closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model"),value=c(Nrun,simulation_end,p.,behavioural_model))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w."),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)

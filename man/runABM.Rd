@@ -13,6 +13,8 @@ runABM(
   n_unused_cores = 2,
   use_parallel = T,
   ignore_social = F,
+  shock = FALSE,
+  w = 1/3,
   quiet = TRUE
 )
 }
@@ -32,6 +34,10 @@ runABM(
 \item{use_parallel}{if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.}
 
 \item{ignore_social}{if TRUE ignore social network effects. Default is FALSE}
+
+\item{shock}{if TRUE a 2030 x4 shock is included}
+
+\item{w}{(1-w) is flexibility pass-through}
 
 \item{quiet}{if TRUE messaging is reduced}
 }
