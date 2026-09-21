@@ -29,7 +29,7 @@ update_agents(
 
 \item{ignore_social}{option to ignore social effects. Default is FALSE.}
 
-\item{behavioural_model}{"prospect" (default) or "classic"}
+\item{behavioural_model}{"prospect" (default) or "classic" or "full"}
 
 \item{ignore_theta}{defaults to TRUE}
 
@@ -47,10 +47,10 @@ utilities. Agents evaluate the optimal electricity tariff plan. This includes a 
 }
 \examples{
 
-prices_scen <- set_prices(sD)
-social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
+#prices_scen <- set_prices(sD)
+#social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+#agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 
-#agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
+#agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
 #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 }

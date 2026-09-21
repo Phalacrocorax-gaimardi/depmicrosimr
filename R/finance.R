@@ -357,7 +357,7 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3,shock=FALSE){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
   #
   midyear <- function(year,tou_band) {
     #a function to identify the decimal date "mid_year" for day/night/peak hours
@@ -822,7 +822,6 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 }
 
 
-
 #' evaluate_tariffs
 #'
 #' Agents' prospect-theory evaluation of the initial fixed to flexible switching decision. \code{evaluate_tariffs()} uses \code{get_prospect_costs()} (the five annual costs) and \code{get_ce_value()}
@@ -879,4 +878,77 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
     decision = decision
   )
 }
+
+
+
+#' evaluate_full_cost
+#'
+#' \code{evaluate_full_cost()} is the similar to \code{evalute_tariffs()} but inclued the bahvioural costs associated with
+#' the penalty terms in the full cost functional.
+#' Agents' prospect-theory evaluation of the initial fixed to flexible switching decision. \code{evaluate_tariffs()} uses \code{get_prospect_costs()} (the five annual costs) and \code{get_ce_value()}
+#' (the certainty-equivalent of each plan), then decides to adopt whichever of \code{tou}
+#' \code{dynamic} has the most favourable certainty-equivalent gain. If there is no gain, the agents stay on
+#' \code{flat}. This is the self-contained unit meant to be called once per household from
+#' \code{update_agents()} in place of the classic savings/social/theta decision.
+#'
+#' @param scen scenario dataframe
+#' @param kWh annual load
+#' @param phi \eqn{\phi}
+#' @param gamma \eqn{\gamma}
+#' @param eta \eqn{\eta}
+#' @param tau \eqn{\tau}
+#' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
+#' @param smart_rollout smart meter rollout time
+#' @param flex_certainty_tou confidence in tou flexibility
+#' @param flex_certainty_det confidence in det flexibility
+#' @param lambda loss aversion
+#' @param prices_scen price scenario
+#' @param params parameters at params$yeartime
+#'
+#' @returns a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}
+#'   output), and \code{decision} (\code{"flat"}, \code{"tou"}, or \code{"dynamic"})
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' params <- scenario_params(sD,2032)
+#' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
+#' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
+evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
+
+  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
+
+  costs <- tibble::tibble(flat=costs_flat$annual_bill_inflexible,tou_noflex=NA,tou_flex=NA,det_noflex=NA,det_flex=NA)
+  if(params$yeartime >= smart_rollout){
+    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
+    costs$tou_noflex <- costs_tou$annual_bill_inflexible
+    costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
+  }
+  if(params$yeartime >= 2026.5){
+    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
+    costs$det_noflex <- costs_det$annual_bill_inflexible
+    costs$det_flex <- costs_det$annual_bill_flexible+costs_det$penalty+costs_det$kinetic
+  }
+  #certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  #certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+  ce <- get_ce_value(scen = scen,costs$flat, costs$tou_noflex, costs$tou_flex,
+                     costs$det_noflex, costs$det_flex,flex_certainty_tou,flex_certainty_det,lambda)
+
+  # adopt whichever of tou/dynamic has the higher CE, provided it's positive;
+  # if neither plan is available yet (both NA) or neither clears zero, stay on flat
+  candidates <- c(tou = ce$CE_tou, dynamic = ce$CE_det)
+  if (all(is.na(candidates))) {
+    decision <- "flat"
+  } else {
+    best <- names(candidates)[which.max(candidates)]
+    decision <- if (max(candidates, na.rm = TRUE) > 0) best else "flat"
+  }
+
+  list(
+    costs = costs,
+    ce = ce,
+    decision = decision
+  )
+}
+
 

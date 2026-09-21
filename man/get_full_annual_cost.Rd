@@ -5,13 +5,12 @@
 \title{get_full_cost}
 \usage{
 get_full_annual_cost(
-  kWh = 8760,
+  kWh = 4200,
   tariff_plan,
-  phi = 0.5,
+  phi = 0.4,
   gamma = 2,
-  eta = 0.5,
+  eta = 0.3,
   tau = 36,
-  kernel = "exp",
   natural_profile = "LP1",
   prices_scen,
   params
@@ -30,8 +29,6 @@ get_full_annual_cost(
 
 \item{tau}{energy recovery horizon}
 
-\item{kernel}{choice of kernel, default "exp"}
-
 \item{natural_profile}{L1 or LP3 at the moment}
 
 \item{prices_scen}{price scenario}
@@ -47,8 +44,8 @@ dataframe with cost breakdown
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2030)
-get_full_annual_cost(4200,"flat",0.,10,0.1,24,"exp","LP1",prices_scen,params)
-get_full_annual_cost(4200,"tou",phi=0.5,gamma=5,eta=0.5,tau=24,"exp","LP1",prices_scen,params)
-get_full_annual_cost(8760,"dynamic",phi=0.5,gamma=1,eta=0.5,tau=72,"exp","LP1",prices_scen,params)
-
+get_full_annual_cost(4200,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
+get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
 }

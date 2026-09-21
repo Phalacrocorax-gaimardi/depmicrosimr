@@ -8,10 +8,10 @@ get_profile(
   year,
   kWh,
   tariff_plan,
-  phi = 0.5,
-  gamma = 0.25,
-  eta = 0.1,
-  tau = 24,
+  phi = 0.4,
+  gamma = 5,
+  eta = 0.3,
+  tau = 48,
   natural_profile = "LP1",
   prices_scen
 )
@@ -45,6 +45,6 @@ This function is used in get_aggregate_profile()
 }
 \examples{
 prices_scen <- set_prices(sD)
-get_profile(2030,3000,"dynamic",0.25,1,0.2,48,"LP1",prices_scen)
+get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
 
 }

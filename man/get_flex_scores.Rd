@@ -42,8 +42,8 @@ get_flex_scores(
 \item{prices_scen}{price scenario}
 }
 \description{
-Evaluates a mesure of how much load has been shifted (flexibility) in response a price scenario, tariff plan. Flexibility is defined as
-\deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year.\cr
+Evaluates a measure of how much load has been shifted in response a specific price incentive (tariff plan). The flexibility is defined as
+\deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year. This is the same as \eqn{\frac{1}{2} \sum_t \mid x_t \mid} (see \code{get_flex})\cr
 \cr
 The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
 }

@@ -27,7 +27,7 @@ runABM(
 
 \item{resample_society}{if TRUE resample hp_society_oo with replacement to capture additional variability}
 
-\item{behavioural_model}{choose "classic" or "prospect" (default)}
+\item{behavioural_model}{choose "classic" or "prospect" (default) or "full"}
 
 \item{n_unused_cores}{number of cores left unused in parallel/foreach. Recommended values 2 or 1.}
 
@@ -37,7 +37,7 @@ runABM(
 
 \item{shock}{if TRUE a 2030 x4 shock is included}
 
-\item{w}{(1-w) is flexibility pass-through}
+\item{w}{(1-w) is flexibility benefit pass-through (seen by agent)}
 
 \item{quiet}{if TRUE messaging is reduced}
 }

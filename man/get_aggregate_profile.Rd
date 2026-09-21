@@ -4,7 +4,7 @@
 \alias{get_aggregate_profile}
 \title{get_aggregate_profile}
 \usage{
-get_aggregate_profile(year, abm, prices_scen)
+get_aggregate_profile(year, abm, prices_scen, n_cores)
 }
 \arguments{
 \item{year}{integer year}
@@ -12,7 +12,10 @@ get_aggregate_profile(year, abm, prices_scen)
 \item{abm}{abm output dataframe}
 
 \item{prices_scen}{price scenario}
+
+\item{n_cores}{usually parallel::detectCores() - 2 or similar}
 }
 \description{
-get_aggregate_profile
+returns the aggregate hourly load implied by the ABM output. This function uses parallel::mclapply and runs
+on MacOS/Linux.
 }

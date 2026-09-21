@@ -702,9 +702,9 @@ sem_trend_price <- function(scen,yeartime){
 #'
 #' @examples
 #' prices_scen <- set_prices(sD)
-#' get_profile(2030,3000,"dynamic",0.25,1,0.2,48,"LP1",prices_scen)
+#' get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
 #'
-get_profile <- function(year, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, tau=24, natural_profile="LP1",prices_scen) {
+get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=48, natural_profile="LP1",prices_scen) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   profile <- tolower(natural_profile)
@@ -741,42 +741,68 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.5, gamma=0.25, eta=0.1, ta
 
 #' get_aggregate_profile
 #'
+#' returns the aggregate hourly load implied by the ABM output. This function uses parallel::mclapply and runs
+#' on MacOS/Linux.
+#'
+#'
 #' @param year integer year
 #' @param abm abm output dataframe
 #' @param prices_scen  price scenario
+#' @param n_cores usually parallel::detectCores() - 2 or similar
 #'
 #' @returns
 #' @export
 #'
 #' @examples
-get_aggregate_profile <- function(year,abm,prices_scen){
+#'
+get_aggregate_profile <- function(year, abm, prices_scen, n_cores) {
 
-  abm_y <- abm %>% filter(date==ymd(paste(year,"01","01",sep="-")))
+  # 1. Filter households for target year
+  abm_y <- abm %>%
+    dplyr::filter(date == lubridate::ymd(paste(year, "01", "01", sep = "-"))) %>%
+    dplyr::select(j, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
 
-  func <- function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) get_profile(year,kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
-
-  abm_y <- abm_y %>% select(j,kWh,tariff_plan, phi, gamma, eta, tau, natural_profile)
-  #aggregate by tariff_plan
-
-  res <- tibble()
-  for(tariff_plan1 in c("flat","tou","dynamic"))
-  {
-    abm_s <- abm_y %>% filter(tariff_plan==tariff_plan1)
-    res1 <- pmap(abm_s, func) |> list_rbind() |> group_by(datetime) |> summarise(natural_load=sum(natural_load),optimised_load = sum(optimised_load, na.rm = TRUE), .groups = "drop")
-    res1$tariff_plan <- tariff_plan1
-    res <- res %>% bind_rows(res1)
-  }
-
-  res <- abm_s |> dplyr::mutate(data = pmap(pick(-j), func)) |> tidyr::unnest(cols = data) |> summarise(
-    natural_load   = sum(natural_load),
-    optimised_load = sum(optimised_load, na.rm = TRUE),
-    .by = c(j, tariff_plan,datetime) # Group by j (and datetime if needed)
+  # 2. Parallel execution across all households using base parallel::mcmapply
+  profile_list <- parallel::mcmapply(
+    FUN = function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) {
+      df <- get_profile(
+        year            = year,
+        kWh             = kWh,
+        tariff_plan     = tariff_plan,
+        phi             = phi,
+        gamma           = gamma,
+        eta             = eta,
+        tau             = tau,
+        natural_profile = natural_profile,
+        prices_scen     = prices_scen
+      )
+      # Attach tariff_plan for aggregation
+      df$tariff_plan <- tariff_plan
+      return(df)
+    },
+    kWh             = abm_y$kWh,
+    tariff_plan     = abm_y$tariff_plan,
+    phi             = abm_y$phi,
+    gamma           = abm_y$gamma,
+    eta             = abm_y$eta,
+    tau             = abm_y$tau,
+    natural_profile = abm_y$natural_profile,
+    SIMPLIFY        = FALSE,
+    mc.cores        = n_cores,
+    mc.preschedule  = FALSE  # Chunks tasks evenly across worker cores
   )
 
+  # 3. Bind all list outputs and aggregate load profiles by tariff and datetime
+  res <- dplyr::bind_rows(profile_list) %>%
+    dplyr::group_by(tariff_plan, datetime) %>%
+    dplyr::summarise(
+      natural_load   = sum(natural_load, na.rm = TRUE),
+      optimised_load = sum(optimised_load, na.rm = TRUE),
+      .groups        = "drop"
+    )
+
   return(res)
-
 }
-
 
 #' get_full_cost
 #'
@@ -788,7 +814,6 @@ get_aggregate_profile <- function(year,abm,prices_scen){
 #' @param gamma dimensionless cost penalty
 #' @param eta dimensionless ramping penalty
 #' @param tau energy recovery horizon
-#' @param kernel choice of kernel, default "exp"
 #' @param natural_profile L1 or LP3 at the moment
 #' @param prices_scen price scenario
 #' @param params parameters at yeartime
@@ -799,14 +824,16 @@ get_aggregate_profile <- function(year,abm,prices_scen){
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2030)
-#' get_full_annual_cost(4200,"flat",0.,10,0.1,24,"exp","LP1",prices_scen,params)
-#' get_full_annual_cost(4200,"tou",phi=0.5,gamma=5,eta=0.5,tau=24,"exp","LP1",prices_scen,params)
-#' get_full_annual_cost(8760,"dynamic",phi=0.5,gamma=1,eta=0.5,tau=72,"exp","LP1",prices_scen,params)
-#'
-get_full_annual_cost <- function(kWh=8760, tariff_plan, phi=0.5, gamma=2, eta=0.5, tau=36,kernel="exp",natural_profile="LP1", prices_scen,params) {
+#' get_full_annual_cost(4200,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
+#' get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.3, tau=36,natural_profile="LP1", prices_scen,params) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   yeartime <- params$yeartime
+  kernel="exp"
+
   standing_charge <- params[[paste0("standing_charge_", tariff_plan)]]
   profile <- tolower(natural_profile)
   load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
@@ -889,7 +916,7 @@ get_full_annual_cost <- function(kWh=8760, tariff_plan, phi=0.5, gamma=2, eta=0.
   } else {
     # For flat tariffs, inflexible and flexible loads are identical
     bill_inflex <- sum(df$price * df$load) + standing_charge
-    bill_flex   <- bill_inflex + standing_charge
+    bill_flex   <- bill_inflex
     ramping_cost <- 0
     behavioural_cost <- 0
   }
@@ -918,8 +945,8 @@ get_full_annual_cost <- function(kWh=8760, tariff_plan, phi=0.5, gamma=2, eta=0.
 
 #' get_flex_scores
 #'
-#' Evaluates a mesure of how much load has been shifted (flexibility) in response a price scenario, tariff plan. Flexibility is defined as
-#' \deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year.\cr
+#' Evaluates a measure of how much load has been shifted in response a specific price incentive (tariff plan). The flexibility is defined as
+#' \deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year. This is the same as \eqn{\frac{1}{2} \sum_t \mid x_t \mid} (see \code{get_flex})\cr
 #' \cr
 #' The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
 #'

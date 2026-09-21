@@ -167,7 +167,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' @param prices_scen tariff plan price assumptions
 #' @param social_network artificial social network
 #' @param ignore_social option to ignore social effects. Default is FALSE.
-#' @param behavioural_model "prospect" (default) or "classic"
+#' @param behavioural_model "prospect" (default) or "classic" or "full"
 #' @param ignore_theta defaults to TRUE
 #' @param quiet TRUE to suppress messages
 #'
@@ -175,11 +175,11 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' @export
 #' @examples
 #'
-#' prices_scen <- set_prices(sD)
-#' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
+#' #prices_scen <- set_prices(sD)
+#' #social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
+#' #agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
-#' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="prospect",quiet=FALSE)
+#' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
 
 update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
@@ -238,13 +238,9 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
   b_s_3 <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-du_social,-savings)
 
   } else {
+    if(behavioural_model=="prospect"){
 
     # decision_rule == "prospect"
-    # only flat/tou agents are evaluated this pass -- dynamic agents are left untouched
-    # IS THIS REALISTIC?
-    # (full retrospective re-evaluation for tou/dynamic households is the deferred piece)
-    #to_evaluate <- b_s %>% dplyr::filter(current_plan %in% c("flat","tou"))
-    #unchanged   <- b_s %>% dplyr::filter(!(current_plan %in% c("flat","tou")))
 
     evaluate_one <- function(kWh,phi,gamma,eta,tau,lambda,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
       c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
@@ -265,7 +261,30 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
       tibble::tibble(tariff_plan=new_plan, annual_bill=new_bill,
                      CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
     }
+    } else {
+      #this choice includes quantified behavioural load-shifting cost as well as loss aversion
+      #
+      evaluate_one <- function(kWh,phi,gamma,eta,tau,lambda,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
+        c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+        c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+        #adjust ce_det according to share of associates who have adopted dynamic
+        c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value) #social effect drives c_tou to c_tou_max
+        c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_det) #social effect drives c_dyn to c_det
+        #dynamic confidence increases but does not exceed the prevailing c_tou
+        c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
+        result <- evaluate_full_cost(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
+        # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
+        #new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
+        new_plan <- result$decision
+        new_bill <- switch(new_plan,
+                           flat    = result$costs$flat,
+                           tou     = result$costs$tou_flex,
+                           dynamic = result$costs$det_flex)
+        tibble::tibble(tariff_plan=new_plan, annual_bill=new_bill,
+                       CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
+      }
 
+}
     #if (nrow(to_evaluate) > 0) {
     b_s_3 <- b_s %>%
         # CHANGED (bug fix): drop any CE_tou/CE_det carried over from a previous timestep's
@@ -334,9 +353,9 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @param n_unused_cores number of cores left unused in parallel/foreach. Recommended values 2 or 1.
 #' @param use_parallel if TRUE uses multiple cores. Use FALSE for diagnostic runs on a single core.
 #' @param ignore_social if TRUE ignore social network effects. Default is FALSE
-#' @param behavioural_model choose "classic" or "prospect" (default)
+#' @param behavioural_model choose "classic" or "prospect" (default) or "full"
 #' @param shock if TRUE a 2030 x4 shock is included
-#' @param w (1-w) is flexibility pass-through
+#' @param w (1-w) is flexibility benefit pass-through (seen by agent)
 #' @param quiet if TRUE messaging is reduced
 #'
 #' @return a three component list - simulation output, scenario setup, meta-parameters
