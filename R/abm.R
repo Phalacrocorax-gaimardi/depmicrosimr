@@ -421,6 +421,8 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                 ignore_social = ignore_social,
                                 quiet = quiet,
                                 behavioural_model=behavioural_model,
+                                shock=shock,
+                                w=w,
                                 mc.cores=number_of_cores)
     }
 
