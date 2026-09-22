@@ -246,8 +246,8 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
       c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
       c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
       #adjust ce_det according to share of associates who have adopted dynamic
-      c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value) #social effect drives c_tou to c_tou_max
-      c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_det) #social effect drives c_dyn to c_det
+      c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+      c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_tou) #social effect drives c_dyn to c_dyn_max
       #dynamic confidence increases but does not exceed the prevailing c_tou
       c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
       result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
@@ -269,7 +269,7 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
         c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
         #adjust ce_det according to share of associates who have adopted dynamic
         c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value) #social effect drives c_tou to c_tou_max
-        c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_det) #social effect drives c_dyn to c_det
+        c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_tou) #social effect drives c_dyn to c_det
         #dynamic confidence increases but does not exceed the prevailing c_tou
         c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
         result <- evaluate_full_cost(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
