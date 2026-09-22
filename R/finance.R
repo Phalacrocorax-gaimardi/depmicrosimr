@@ -320,7 +320,7 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 }
 
 
-#' set_prices
+#' set_prices_old
 #'
 #' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
 #' this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
@@ -344,7 +344,7 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #' \cr
 #' Optionally, the CRU wholesale price cap (currently 0.5euro/kWh) can be turned off.
 #'
-#'
+#' Flat and ToU tariffs can be set retrospectively or based on forecast prices. Probably, retrospective price setting is best.
 #'
 #' @param scen scenario
 #' @param end_year last full year for simulation
@@ -356,8 +356,8 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #' @export
 #'
 #' @examples
-#' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
+#' #set_prices_old(sD)
+set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
   #
   midyear <- function(year,tou_band) {
     #a function to identify the decimal date "mid_year" for day/night/peak hours
@@ -430,6 +430,110 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
   #apply VAT to all prices
   result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tou_band),by="datetime") %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state))
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price) %>% dplyr::select(-tou_band,-yeartime)
+}
+
+
+#' set_prices
+#'
+#' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
+#' this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
+#' prices with reasonable accuracy. The \code{tariff_plan} are supposed to be broadly reflective of the market, rather than to mimic one particular
+#' supplier. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
+#' on specific assumptions.\cr
+#' \cr
+#' This is equivalent to the assumption that network supplier set their prices so that the average price paid by
+#' customers on flat, ToU and dynamic prices are related across standard profiles.The parameter \code{w} represents the fraction of gain
+#' from flexibility that is passed on to consumers. If the gain is passed on in full, then \eqn{p_{flat}=p_{tou}} where the weighted mean prices are calculated
+#' in the inflexible LP1 profile. In general however, \eqn{p_{flat} < p_{tou}} for inflexible customers, and therefore there is a potential
+#' cost from adopting variable pricing tariffs. For inflexible customers, \code{set_prices()} gives \eqn{p_{tou}\approx p_{dynamic} > p_{flat}}
+#'
+#' \cr
+#' \cr
+#' Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
+#' \code{peak_network_charge_fun(scen,yeartime)} etc. These are supposed to include supplier uplift, and other systems charges on top of the regulated network TUoS and DUos network charge. The model assumes that
+#' wholesale prices + VAT are passed through.\cr
+#' \cr
+#' set_prices() is meant to to run at the beginning of each ABM run.\cr
+#' \cr
+#' Optionally, the CRU wholesale price cap (currently 0.5euro/kWh) can be turned off.
+#'
+#' Flat and ToU tariffs can be set retrospectively or based on forecast prices. Probably, retrospective price setting is best.
+#'
+#' @param scen scenario
+#' @param end_year last full year for simulation
+#' @param cru_cap Boolean, defaults to TRUE
+#' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
+#' @param shock if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+#' set_prices(sD)
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3,shock=FALSE){
+  #
+  wholesale <-  sem_prices(scen,end_year,shock=shock)
+  prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
+  #
+  prices <- prices %>% dplyr::mutate(y=lubridate::decimal_date(datetime),network_price=dplyr::case_when(tou_band=="night"~night_network_charge_fun(scen,y),
+                                                                                                        tou_band=="day"~day_network_charge_fun(scen,y),
+                                                                                                        tou_band=="peak"~peak_network_charge_fun(scen,y)))
+  #assume price cap scales with trend sem price
+  if(cru_cap) {
+    prices <- prices %>% dplyr::mutate(dynamic_cap=0.5*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
+    prices <- prices %>% dplyr::mutate(price=pmin(dynamic_cap,sem_price)+network_price) #%>% dplyr::select(-dynamic_cap)
+  } else{
+    prices <- prices %>% dplyr::mutate(price=sem_price+network_price)
+  }
+
+  #dynamic prices
+  dyn_prices <- prices %>% dplyr::select(datetime,tou_band,price) %>% dplyr::mutate(tariff_plan="dynamic")
+  dyn_prices <- dyn_prices %>% dplyr::inner_join(load_profiles_generalised)
+
+  #################################
+  # a somewhat speculative guess about how network suppliers arrive at their flat tariff (commodity swap price)
+  # mean flat prices paid by year
+  #################################
+  flat_hedge <- 0.02
+  flat_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+flat_hedge)) %>%
+    dplyr::mutate(
+      flat = slider::slide_index_dbl(price * ((1-w)*lp1+w*lp2), datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE)
+    ) %>%
+    tidyr::fill(flat, .direction = "up") %>%
+    dplyr::select(-tariff_plan, -price)
+#
+flat_prices$tariff_plan <- "flat"
+flat_prices <- flat_prices %>% dplyr::rename("price"=flat)
+
+tou_hedge <- 0.02
+tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
+  dplyr::group_by(tou_band) %>%
+  dplyr::arrange(datetime, .by_group = TRUE) %>%
+  dplyr::mutate(
+    # Trailing 365-day weighted mean for load profile 1
+    p_lp1 = slider::slide_index_dbl(lp1 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
+      slider::slide_index_dbl(lp1,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
+
+    # Trailing 365-day weighted mean for load profile 2
+    p_lp2 = slider::slide_index_dbl(lp2 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
+      slider::slide_index_dbl(lp2,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
+
+    # Combined weighted ToU price
+    tou = w * p_lp1 + (1 - w) * p_lp2
+  ) %>%
+  # Backfill initial 2019 NAs strictly within each ToU band group
+  tidyr::fill(tou, .direction = "up") %>%
+  dplyr::ungroup() %>% dplyr::arrange(datetime) %>% dplyr::select(-p_lp1, -p_lp2,-price)
+
+
+  tou_prices$tariff_plan <- "tou"
+  tou_prices <- tou_prices %>% dplyr::rename("price"=tou)
+
+ #combine tariffs
+  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) #%>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
+  #apply VAT & margin to all prices
+  result <- result %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state))
+  result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,lubridate::decimal_date(datetime)))*price) %>% dplyr::select(-tou_band)
 }
 
 
