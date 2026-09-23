@@ -4,7 +4,7 @@
 \alias{get_aggregate_profile}
 \title{get_aggregate_profile}
 \usage{
-get_aggregate_profile(year, abm, prices_scen, n_cores)
+get_aggregate_profile(year, abm, prices_scen, use_parallel = T, n_cores)
 }
 \arguments{
 \item{year}{integer year}
@@ -12,6 +12,8 @@ get_aggregate_profile(year, abm, prices_scen, n_cores)
 \item{abm}{abm output dataframe}
 
 \item{prices_scen}{price scenario}
+
+\item{use_parallel}{use parallel}
 
 \item{n_cores}{usually parallel::detectCores() - 2 or similar}
 }
