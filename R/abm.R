@@ -465,7 +465,9 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                 quiet = quiet,
                                 behavioural_model=behavioural_model,
                                 shock=shock,
-                                mc.cores=number_of_cores)
+                                w=w,
+                                mc.cores=number_of_cores,
+                                mc.preschedule = FALSE)
     }
 
 
@@ -481,7 +483,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                     quiet = quiet)
 
 
-    closeAllConnections()
+    #closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
     meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w."),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w))
     #replace "t" with dates
