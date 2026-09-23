@@ -4,7 +4,13 @@
 \alias{get_aggregate_profile}
 \title{get_aggregate_profile}
 \usage{
-get_aggregate_profile(year, abm, prices_scen, use_parallel = T, n_cores)
+get_aggregate_profile(
+  year,
+  abm,
+  prices_scen,
+  use_parallel = TRUE,
+  n_cores = parallel::detectCores() - 1
+)
 }
 \arguments{
 \item{year}{integer year}

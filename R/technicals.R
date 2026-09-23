@@ -756,60 +756,37 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
 #'
 #' @examples
 #'
-get_aggregate_profile <- function(year, abm, prices_scen, use_parallel=T,n_cores) {
-  #
+get_aggregate_profile <- function(year, abm, prices_scen, use_parallel = TRUE, n_cores = parallel::detectCores() - 1) {
+
+  #filter abm output for target year
   abm_y <- abm %>%
     dplyr::filter(date == lubridate::ymd(paste(year, "01", "01", sep = "-"))) %>%
-    dplyr::select(simulation,date, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
+    dplyr::select(simulation, date, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
 
-  # 2. Parallel execution across all households using base parallel::mcmapply
-  if(use_parallel){
-  profile_list <- parallel::mcmapply(
-    FUN = function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) {
-      df <- get_profile(
-        year            = year,
-        kWh             = kWh,
-        tariff_plan     = tariff_plan,
-        phi             = phi,
-        gamma           = gamma,
-        eta             = eta,
-        tau             = tau,
-        natural_profile = natural_profile,
-        prices_scen     = prices_scen
-      )
-      # Attach tariff_plan for aggregation
-      df$tariff_plan <- tariff_plan
-      return(df)
-    },
-    kWh             = abm_y$kWh,
-    tariff_plan     = abm_y$tariff_plan,
-    phi             = abm_y$phi,
-    gamma           = abm_y$gamma,
-    eta             = abm_y$eta,
-    tau             = abm_y$tau,
-    natural_profile = abm_y$natural_profile,
-    SIMPLIFY        = FALSE,
-    mc.cores        = n_cores,
-    mc.preschedule  = FALSE  # Chunks tasks evenly across worker cores
-  )} else {
+  abm_y$year <- year
+  #abm_y <- abm_y[1:10,]
+  # worker function
+  worker <- function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) {
+    df <- get_profile(
+      year            = year,
+      kWh             = kWh,
+      tariff_plan     = tariff_plan,
+      phi             = phi,
+      gamma           = gamma,
+      eta             = eta,
+      tau             = tau,
+      natural_profile = natural_profile,
+      prices_scen     = prices_scen
+    )
+    df$tariff_plan <- tariff_plan
+    return(df)
+  }
 
-    profile_list <- mapply(
-      FUN = function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) {
-        df <- get_profile(
-          year            = year,
-          kWh             = kWh,
-          tariff_plan     = tariff_plan,
-          phi             = phi,
-          gamma           = gamma,
-          eta             = eta,
-          tau             = tau,
-          natural_profile = natural_profile,
-          prices_scen     = prices_scen
-        )
-        # Attach tariff_plan for aggregation
-        df$tariff_plan <- tariff_plan
-        return(df)
-      },
+  # parallel or not
+  if (use_parallel) {
+    #
+    profile_list <- parallel::mcmapply(
+      FUN             = worker,
       kWh             = abm_y$kWh,
       tariff_plan     = abm_y$tariff_plan,
       phi             = abm_y$phi,
@@ -818,12 +795,27 @@ get_aggregate_profile <- function(year, abm, prices_scen, use_parallel=T,n_cores
       tau             = abm_y$tau,
       natural_profile = abm_y$natural_profile,
       SIMPLIFY        = FALSE,
-     )
+      mc.cores        = n_cores,
+      mc.preschedule  = FALSE
+    )
+  } else {
+
+    profile_list <- mapply(
+      FUN             = worker,
+      kWh             = abm_y$kWh,
+      tariff_plan     = abm_y$tariff_plan,
+      phi             = abm_y$phi,
+      gamma           = abm_y$gamma,
+      eta             = abm_y$eta,
+      tau             = abm_y$tau,
+      natural_profile = abm_y$natural_profile,
+      SIMPLIFY        = FALSE # Fixed trailing comma error here
+    )
   }
 
-  # 3. Bind all list outputs and aggregate load profiles by tariff and datetime
+  #bind and aggregate
   res <- dplyr::bind_rows(profile_list) %>%
-    dplyr::group_by(tariff_plan,datetime) %>%
+    dplyr::group_by(datetime, tariff_plan) %>%
     dplyr::summarise(
       natural_load   = sum(natural_load, na.rm = TRUE),
       optimised_load = sum(optimised_load, na.rm = TRUE),
