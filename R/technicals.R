@@ -732,7 +732,7 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
   else{
 
     df$optimised_load <- df$load
-    df <- df %>% rename("natural_load"=load)
+    df <- df %>% dplyr::rename("natural_load"=load)
   }
   # 6. Return the final dataframe cleanly (No pipes on the return statement!)
   return(df)
