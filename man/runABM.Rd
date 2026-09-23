@@ -9,12 +9,12 @@ runABM(
   Nrun = 1,
   simulation_end = 2030,
   resample_society = F,
-  behavioural_model = "prospect",
+  behavioural_model = "full",
   n_unused_cores = 2,
   use_parallel = T,
   ignore_social = F,
   shock = FALSE,
-  w = 1/3,
+  w = 1/4,
   quiet = TRUE
 )
 }

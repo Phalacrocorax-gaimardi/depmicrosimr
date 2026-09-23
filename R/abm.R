@@ -67,7 +67,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 
   agents_in <- agents_in %>% dplyr::select(serial,kWh,tariff_plan,rollout,area)
   #combine with structural params (inertia, proactive,flexibility)
-  agents_in <- agents_in %>% dplyr::inner_join(struct_params)
+  agents_in <- agents_in %>% dplyr::inner_join(struct_params,by="serial")
   #rollout year
   #add flex params
   agents_in$eta <- eta
@@ -108,7 +108,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in <- agents_in %>% dplyr::rowwise() %>% dplyr::mutate(match_flex_params(flex_score_0,score_cube)) %>% dplyr::ungroup()
   #theta_max <- scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
   #agents_in <- agents_in %>% dplyr::mutate(theta = theta_max*(1-(proactive - min(proactive))/(max(proactive)-min(proactive))))
-  agents_in <0
+  #agents_in <0
 
   #assign natural profile codes : currently only an urban/rural profile
   agents_in <- agents_in %>% dplyr::mutate(natural_profile=dplyr::case_when(area=="Urban"~"lp1",
@@ -139,6 +139,16 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   tou_adopter_nodes  <- igraph::V(g)$tou_adopter==TRUE
   agents_in$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
   agents_in$degree <- igraph::degree(g)
+  #compute c_tou_soc (already a social influence effect)
+  #homogeneous characteristics
+  c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+  agents_in <- agents_in %>% dplyr::mutate(c_tou_soc=c_tou + ifelse(degree == 0, 0, pmin(1,q_tou/ degree)) * max(0, c_tou_max - c_tou))
+
+  agents_in$c_det_soc <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+
+
+
   #add survey the network degree if desired
   #agents_in <- agents_in %>% dplyr::inner_join(tibble::as_tibble(social_network) %>% dplyr::select(serial,degree),by="serial")
   #print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
@@ -180,163 +190,173 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 #' #agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 #'
 #' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
-#' #agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
+#' #agents_2 <- update_agents(sD,2030,agents_1,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
+update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network, ignore_social = FALSE, behavioural_model = "prospect", ignore_theta = TRUE, quiet = TRUE) {
 
-update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,ignore_social=F,behavioural_model="prospect",ignore_theta=TRUE,quiet=TRUE){
-  #
-  #params at yeartime
-  params <- scenario_params(scen,yeartime)
-  #
+  stopifnot(behavioural_model %in% c("prospect", "classic", "full", "test"))
+  params <- scenario_params(scen, yeartime)
+  c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+  c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+
   a_s <- agents_in
-  n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan=="dynamic"))[1]
-  print(paste("initial number of dynamic tariff plans", n_dynamic))
-  #social influence (homogeneous)
-  #du_social <- params$nu.*n_dynamic/dim(a_s)[1]
-  #assume that any old day/night custeomers are converted to day/night/peak rate when smart meters are installed.
-  a_s <- a_s %>% dplyr::mutate(tariff_plan=replace(tariff_plan, (tariff_plan=="tou_old") & (yeartime >= rollout),"tou"))
-  a_s <- dplyr::ungroup(a_s)
-  #only consider switcher when smart meter are installed
-  #random subset of potential switchers
-  b_s <- dplyr::slice_sample(a_s,n=roundr(dim(a_s)[1]*params$p.))
-  #note ellipsis to handle uncalled columns
-  b_s$current_plan <- b_s$tariff_plan
-  #
-  tariff_plan_bills_env <- function(kWh,phi,gamma,eta,tau,natural_profile,rollout,...) {
+  n_tou <- dim(a_s %>% dplyr::filter(tariff_plan == "tou" | tariff_plan == "tou_old"))[1]
+  n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan == "dynamic"))[1]
 
-    tariff_plan_bills(kWh,phi,gamma,eta,tau,natural_profile,rollout,prices_scen,params)
+  print(paste("yeartime =", params$yeartime))
+  print(paste("number of tou plans", n_tou))
+  print(paste("number of dynamic plans", n_dynamic))
+
+  # Convert old day/night customers when smart meters are installed
+  a_s <- a_s %>% dplyr::mutate(tariff_plan = replace(tariff_plan, (tariff_plan == "tou_old") & (yeartime >= rollout), "tou"))
+  a_s <- dplyr::ungroup(a_s)
+
+  # Sample potential switchers
+  b_s <- dplyr::slice_sample(a_s, n = roundr(dim(a_s)[1] * params$p.))
+  b_s$current_plan <- b_s$tariff_plan
+
+  tariff_plan_bills_env <- function(kWh, phi, gamma, eta, tau, natural_profile, rollout, ...) {
+    tariff_plan_bills(kWh, phi, gamma, eta, tau, natural_profile, rollout, prices_scen, params)
   }
 
-  if (behavioural_model== "classic") {
+  if (behavioural_model == "classic") {
 
-  b_s <- b_s %>% dplyr::select(-annual_bill,-tariff_plan)
+    b_s <- b_s %>% dplyr::select(-annual_bill, -tariff_plan)
 
-  b_s_1 <- b_s %>% dplyr::mutate(bills_data = purrr::pmap(dplyr::pick(dplyr::everything()), tariff_plan_bills_env)) %>% tidyr::unnest(bills_data)
-  #agent evaluates savings relative to closest non-risky tariff plan
-  #agents take avability of tariff plans into account
-  #i.e no tou option if yeartime < rollout
-  #b_s_1 <- b_s_1 %>% dplyr::filter(!(tariff_plan=="tou" & yeartime < rollout))
+    b_s_1 <- b_s %>%
+      dplyr::mutate(bills_data = purrr::pmap(dplyr::pick(dplyr::everything()), tariff_plan_bills_env)) %>%
+      tidyr::unnest(bills_data)
 
-  b_s_1 <- b_s_1 %>% dplyr::group_by(serial) %>% dplyr::slice_min(order_by = annual_bill, n = 2,with_ties = FALSE)
-  #evaluate the total utilities
-   #
-  aux <- b_s_1 %>% dplyr::group_by(serial) %>% dplyr::summarise(
-      cheapest_plan = dplyr::first(tariff_plan),
-      cheapest_bill = dplyr::first(annual_bill),
-      next_plan = dplyr::nth(tariff_plan, 2),
-      next_bill = dplyr::nth(annual_bill, 2),
-      # Calculates savings compared to the 2nd cheapest plan (the runner-up)
-      savings       = (dplyr::first(annual_bill-dplyr::nth(annual_bill, 2))/dplyr::nth(annual_bill, 2)),
-      .groups       = "drop")
-  b_s_2 <- b_s %>% dplyr::inner_join(aux,by="serial")
-  #compute social influence
-  #assume it saturates beyond
-  b_s_2 <- b_s_2 %>% dplyr::mutate(du_social = dplyr::if_else(degree==0,0,params$nu.*pmin(1,q_dyn/degree)))
-  b_s_2 <- b_s_2 %>% dplyr::mutate(du_tot = dplyr::if_else(cheapest_plan=="dynamic", du_social-savings-theta,-savings))
-  #only adopt if
-  b_s_2 <- b_s_2 %>% dplyr::mutate(tariff_plan = dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_plan,next_plan),
-                                   annual_bill=dplyr::if_else(du_tot>0 | is.na(du_tot),cheapest_bill,next_bill))#barrier
-  b_s_3 <- b_s_2 %>% dplyr::select(-cheapest_plan,-cheapest_bill,-next_plan,-next_bill,-du_tot,-du_social,-savings)
+    b_s_1 <- b_s_1 %>%
+      dplyr::group_by(serial) %>%
+      dplyr::slice_min(order_by = annual_bill, n = 2, with_ties = FALSE)
 
-  } else {
-    if(behavioural_model=="prospect"){
+    aux <- b_s_1 %>%
+      dplyr::group_by(serial) %>%
+      dplyr::summarise(
+        cheapest_plan = dplyr::first(tariff_plan),
+        cheapest_bill = dplyr::first(annual_bill),
+        next_plan     = dplyr::nth(tariff_plan, 2),
+        next_bill     = dplyr::nth(annual_bill, 2),
+        savings       = (dplyr::first(annual_bill - dplyr::nth(annual_bill, 2)) / dplyr::nth(annual_bill, 2)),
+        .groups       = "drop"
+      )
 
-    # decision_rule == "prospect"
+    b_s_2 <- b_s %>% dplyr::inner_join(aux, by = "serial")
 
-    evaluate_one <- function(kWh,phi,gamma,eta,tau,lambda,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
-      c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
-      c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
-      #adjust ce_det according to share of associates who have adopted dynamic
-      c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
-      c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_tou) #social effect drives c_dyn to c_dyn_max
-      #dynamic confidence increases but does not exceed the prevailing c_tou
-      c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
-      result <- evaluate_tariffs(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
-      # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
-      #new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
+    b_s_2 <- b_s_2 %>%
+      dplyr::mutate(du_social = dplyr::if_else(degree == 0, 0, params$nu. * pmin(1, q_dyn / degree)))
+
+    b_s_2 <- b_s_2 %>%
+      dplyr::mutate(du_tot = dplyr::if_else(cheapest_plan == "dynamic", du_social - savings - theta, -savings))
+
+    b_s_2 <- b_s_2 %>%
+      dplyr::mutate(
+        tariff_plan = dplyr::if_else(du_tot > 0 | is.na(du_tot), cheapest_plan, next_plan),
+        annual_bill = dplyr::if_else(du_tot > 0 | is.na(du_tot), cheapest_bill, next_bill)
+      )
+
+    b_s_3 <- b_s_2 %>%
+      dplyr::select(-cheapest_plan, -cheapest_bill, -next_plan, -next_bill, -du_tot, -du_social, -savings, -dplyr::any_of("current_plan"))
+
+  } else if (behavioural_model == "prospect") {
+
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, current_plan, degree, q_tou, q_dyn, ...) {
+      #c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+      #c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+      #c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+
+      c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
+      c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
+
+      result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+
       new_plan <- result$decision
       new_bill <- switch(new_plan,
                          flat    = result$costs$flat,
                          tou     = result$costs$tou_flex,
                          dynamic = result$costs$det_flex)
-      tibble::tibble(tariff_plan=new_plan, annual_bill=new_bill,
-                     CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
+
+      tibble::tibble(
+        tariff_plan = new_plan,
+        annual_bill = new_bill,
+        CE_tou      = result$ce$CE_tou,
+        CE_det      = result$ce$CE_det
+      )
     }
-    } else {
-      #this choice includes quantified behavioural load-shifting cost as well as loss aversion
-      #
-      evaluate_one <- function(kWh,phi,gamma,eta,tau,lambda,natural_profile,rollout,current_plan,degree,q_tou,q_dyn,...) {
-        c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
-        c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
-        #adjust ce_det according to share of associates who have adopted dynamic
-        c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value) #social effect drives c_tou to c_tou_max
-        c_tou <- c_tou + ifelse(degree==0,0,min(1,(q_tou+q_dyn)/degree))*max(0,c_tou_max-c_tou) #social effect drives c_dyn to c_det
-        #dynamic confidence increases but does not exceed the prevailing c_tou
-        c_det <- c_det + ifelse(degree==0,0,min(1,q_dyn/degree))*max(0,c_tou-c_det) #social effect drives c_dyn to c_det
-        result <- evaluate_full_cost(scen,kWh,phi,gamma,eta,tau,natural_profile,rollout,c_tou,c_det,lambda,prices_scen,params)
-        # currently on tou: only an upgrade to dynamic is in scope this pass (reversion to
-        #new_plan <- if (current_plan=="tou" && result$decision!="dynamic") "tou" else result$decision
-        new_plan <- result$decision
-        new_bill <- switch(new_plan,
-                           flat    = result$costs$flat,
-                           tou     = result$costs$tou_flex,
-                           dynamic = result$costs$det_flex)
-        tibble::tibble(tariff_plan=new_plan, annual_bill=new_bill,
-                       CE_tou=result$ce$CE_tou, CE_det=result$ce$CE_det)
-      }
 
-}
-    #if (nrow(to_evaluate) > 0) {
     b_s_3 <- b_s %>%
-        # CHANGED (bug fix): drop any CE_tou/CE_det carried over from a previous timestep's
-        # evaluation before this -- tidyr::unnest() errors if the list-column being unnested
-        # (eval_data, which also has CE_tou/CE_det) shares names with existing columns.
-        # any_of() (not all_of()) is deliberate: these columns won't exist yet on the very
-        # first timestep any agent is ever evaluated, and any_of() doesn't error on that.
-        dplyr::select(-annual_bill,-tariff_plan,-dplyr::any_of(c("CE_tou","CE_det"))) %>%
-        dplyr::mutate(eval_data = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
-        tidyr::unnest(eval_data) %>%
-        dplyr::select(-current_plan)
-    #} else {
-    #  to_evaluate$CE_tou <- NA_real_
-    #  to_evaluate$CE_det <- NA_real_
-     #  to_evaluate <- to_evaluate %>% dplyr::select(-current_plan)
-    #}
+      dplyr::select(-annual_bill, -tariff_plan,-ctou_soc,-c_det_soc, -dplyr::any_of(c("CE_tou", "CE_det"))) %>%
+      dplyr::mutate(res = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
+      tidyr::unnest(res) %>%
+      dplyr::select(-dplyr::any_of("current_plan"))
 
-    #unchanged$CE_tou <- NA_real_
-    #unchanged$CE_det <- NA_real_
-    #unchanged <- unchanged %>% dplyr::select(-current_plan)
+  } else if (behavioural_model == "full") {
 
-    #b_s_3 <- dplyr::bind_rows(to_evaluate, unchanged)
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, current_plan, degree, q_tou, q_dyn, ...) {
+
+      c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
+      c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
+
+      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+
+      new_plan <- result$decision
+      new_bill <- switch(new_plan,
+                         flat    = result$costs$flat,
+                         tou     = result$costs$tou_flex,
+                         dynamic = result$costs$det_flex)
+
+      tibble::tibble(
+        tariff_plan = new_plan,
+        annual_bill = new_bill,
+        CE_tou      = result$ce$CE_tou,
+        CE_det      = result$ce$CE_det,
+        c_tou_soc = c_tou_soc,
+        c_det_soc = c_det_soc
+      )
+    }
+
+    b_s_3 <- b_s %>%
+      dplyr::select(-annual_bill, -tariff_plan,-c_tou_soc,-c_det_soc, -dplyr::any_of(c("CE_tou", "CE_det"))) %>%
+      dplyr::mutate(res = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
+      tidyr::unnest(res) %>%
+      dplyr::select(-dplyr::any_of("current_plan"))
+
+  } else if(behavioural_model=="test"){
+
+    b_s_3 <- tibble::tibble()
+
   }
 
+  if(dim(b_s_3)[1]>0){
 
   b_s_3$profile <- "computed"
-  #update agents with switchers
+
   a_s <- dplyr::filter(a_s, !(serial %in% b_s_3$serial))
-  a_s <- dplyr::bind_rows(a_s,b_s_3) %>% dplyr::arrange(serial)
-  a_s <- a_s %>% dplyr::mutate(dep_adopter=(tariff_plan=="dynamic"),tou_adopter=(tariff_plan=="tou"))
-  #a_s <- a_s %>% dplyr::mutate(kW=heating_system_size(ber*floor_area))
-  #recompute social variable
+  a_s <- dplyr::bind_rows(a_s, b_s_3) %>% dplyr::arrange(serial)
+  a_s <- a_s %>% dplyr::mutate(dep_adopter = (tariff_plan == "dynamic"), tou_adopter = (tariff_plan == "tou"))
+
   ma <- igraph::as_adjacency_matrix(social_network)
-  g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(a_s,by="serial")
-  #social network conformity effect
-  dep_adopter_nodes <- igraph::V(g)$dep_adopter==TRUE
-  tou_adopter_nodes  <- igraph::V(g)$tou_adopter==TRUE
-  a_s$q_dyn <- as.numeric(ma %*% dep_adopter_nodes) #social reinforcement 0 no adoption 1 adoption
+  g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(a_s, by = "serial")
+
+  dep_adopter_nodes <- igraph::V(g)$dep_adopter == TRUE
+  tou_adopter_nodes <- igraph::V(g)$tou_adopter == TRUE
+  a_s$q_dyn <- as.numeric(ma %*% dep_adopter_nodes)
   a_s$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
-  if(ignore_social) a_s$q_dyn <- 0 #no adopters assumed present in local network
-  if(ignore_social) a_s$q_tou <- 0
-  #a_s <- a_s %>% dplyr::rowwise() %>% dplyr::mutate(q52 = min(q52+1,4)) #update q52 encoding 1,2,3,4
-  #agents_out <- a_s
-  #a_s <- a_s %>% dplyr::select(-du_tot)
-  if(!quiet) {
-    print(paste("time", round(yeartime,1), "number of switchers",dim(b_s)[1]))
-    }
-  a_s <- a_s %>% dplyr::select(-dep_adopter,-tou_adopter)
+
+  if (ignore_social) a_s$q_dyn <- 0
+  if (ignore_social) a_s$q_tou <- 0
+
+  if (!quiet) {
+    print(paste("time", round(yeartime, 1), "number choosing tou", dim(b_s_3 %>% dplyr::filter(tariff_plan=="tou"))[1]))
+    print(paste("time", round(yeartime, 1), "number choosing dynamic", dim(b_s_3 %>% dplyr::filter(tariff_plan=="dynamic"))[1]))
+    print(paste("time", round(yeartime, 1), "number choosing flat", dim(b_s_3 %>% dplyr::filter(tariff_plan=="flat"))[1]))
+  }
+
+  a_s <- a_s %>% dplyr::select(-dep_adopter, -tou_adopter)
+  }
   return(dplyr::ungroup(a_s))
 }
-
-
 #' runABM
 #'
 #' Runs the dynamic electricity pricing adoption simulation on artificial society of ~1217 agents.
@@ -363,15 +383,19 @@ update_agents <- function(scen,yeartime,agents_in, prices_scen, social_network,i
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="prospect",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=1/3,quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=1/4,quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
   p. <- scen %>% dplyr::filter(parameter=="p.") %>% dplyr::pull(value) #inertia
-  #nu. <- scen %>% dplyr::filter(parameter=="nu.") %>% dplyr::pull(value) #social
-  #theta. <-  scen %>% dplyr::filter(parameter=="theta.") %>% dplyr::pull(value)
-  #
   print(paste("p.=",round(p.,4)))
+  #
+  c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
+  print(paste("c_tou=",c_tou))
+  c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
+  print(paste("c_det =",c_det))
+  c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+  print(paste("socially adjusted confidence c_tou_max =",c_tou_max))
   #seai_elec <- pvbessmicrosimr::seai_elec
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
@@ -441,7 +465,6 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
                                 quiet = quiet,
                                 behavioural_model=behavioural_model,
                                 shock=shock,
-                                w=w,
                                 mc.cores=number_of_cores)
     }
 

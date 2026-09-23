@@ -470,7 +470,7 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3,shock=FALSE){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.25,shock=FALSE){
   #
   wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
@@ -488,7 +488,7 @@ set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=1/3,shock=FALSE){
 
   #dynamic prices
   dyn_prices <- prices %>% dplyr::select(datetime,tou_band,price) %>% dplyr::mutate(tariff_plan="dynamic")
-  dyn_prices <- dyn_prices %>% dplyr::inner_join(load_profiles_generalised)
+  dyn_prices <- dyn_prices %>% dplyr::inner_join(load_profiles_generalised,by=c("datetime","tou_band"))
 
   #################################
   # a somewhat speculative guess about how network suppliers arrive at their flat tariff (commodity swap price)
@@ -532,7 +532,7 @@ tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
  #combine tariffs
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) #%>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
   #apply VAT & margin to all prices
-  result <- result %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state))
+  result <- result %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state),by="datetime")
   result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,lubridate::decimal_date(datetime)))*price) %>% dplyr::select(-tou_band)
 }
 

@@ -45,7 +45,7 @@ dataframe with cost breakdown
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2026)
 get_full_annual_cost(4200,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
-get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
 }

@@ -44,7 +44,7 @@ returns the flexible profile from 1-Jan to 31 Dec of year in a given price scena
 This function is used in get_aggregate_profile()
 }
 \examples{
-prices_scen <- set_prices(sD)
-get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
+#prices_scen <- set_prices(sD)
+#get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
 
 }

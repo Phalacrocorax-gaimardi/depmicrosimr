@@ -10,7 +10,7 @@ update_agents(
   agents_in,
   prices_scen,
   social_network,
-  ignore_social = F,
+  ignore_social = FALSE,
   behavioural_model = "prospect",
   ignore_theta = TRUE,
   quiet = TRUE
@@ -52,5 +52,5 @@ utilities. Agents evaluate the optimal electricity tariff plan. This includes a 
 #agents_in <- initialise_agents(sD,2019,prices_scen,social_network)
 
 #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
-#agents_2 <- update_agents(sD,2026+2/6,agents_1,prices_scen,social_network,quiet=FALSE)
+#agents_2 <- update_agents(sD,2030,agents_1,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
 }

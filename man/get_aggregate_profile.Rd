@@ -15,6 +15,9 @@ get_aggregate_profile(year, abm, prices_scen, n_cores)
 
 \item{n_cores}{usually parallel::detectCores() - 2 or similar}
 }
+\value{
+a dataframe
+}
 \description{
 returns the aggregate hourly load implied by the ABM output. This function uses parallel::mclapply and runs
 on MacOS/Linux.

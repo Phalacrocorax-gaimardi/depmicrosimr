@@ -701,8 +701,8 @@ sem_trend_price <- function(scen,yeartime){
 #' @export
 #'
 #' @examples
-#' prices_scen <- set_prices(sD)
-#' get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
+#' #prices_scen <- set_prices(sD)
+#' #get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
 #'
 get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=48, natural_profile="LP1",prices_scen) {
   #
@@ -750,17 +750,16 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
 #' @param prices_scen  price scenario
 #' @param n_cores usually parallel::detectCores() - 2 or similar
 #'
-#' @returns
+#' @returns a dataframe
 #' @export
 #'
 #' @examples
 #'
 get_aggregate_profile <- function(year, abm, prices_scen, n_cores) {
-
-  # 1. Filter households for target year
+  #
   abm_y <- abm %>%
     dplyr::filter(date == lubridate::ymd(paste(year, "01", "01", sep = "-"))) %>%
-    dplyr::select(j, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
+    dplyr::select(simulation,date, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
 
   # 2. Parallel execution across all households using base parallel::mcmapply
   profile_list <- parallel::mcmapply(
@@ -794,7 +793,7 @@ get_aggregate_profile <- function(year, abm, prices_scen, n_cores) {
 
   # 3. Bind all list outputs and aggregate load profiles by tariff and datetime
   res <- dplyr::bind_rows(profile_list) %>%
-    dplyr::group_by(tariff_plan, datetime) %>%
+    dplyr::group_by(date,tariff_plan) %>%
     dplyr::summarise(
       natural_load   = sum(natural_load, na.rm = TRUE),
       optimised_load = sum(optimised_load, na.rm = TRUE),
@@ -825,9 +824,9 @@ get_aggregate_profile <- function(year, abm, prices_scen, n_cores) {
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2026)
 #' get_full_annual_cost(4200,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
-#' get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-#' get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-#' get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' #get_full_annual_cost(4200,"tou",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' #get_full_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' #get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
 get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.3, tau=36,natural_profile="LP1", prices_scen,params) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
