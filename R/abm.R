@@ -383,7 +383,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=1/4,quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=0.3,quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
@@ -485,7 +485,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
 
     #closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w."),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)

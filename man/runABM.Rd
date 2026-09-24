@@ -14,7 +14,7 @@ runABM(
   use_parallel = T,
   ignore_social = F,
   shock = FALSE,
-  w = 1/4,
+  w = 0.3,
   quiet = TRUE
 )
 }
