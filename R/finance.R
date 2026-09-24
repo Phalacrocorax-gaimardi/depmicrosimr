@@ -470,7 +470,7 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.25,shock=FALSE){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.3,shock=FALSE){
   #
   wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")

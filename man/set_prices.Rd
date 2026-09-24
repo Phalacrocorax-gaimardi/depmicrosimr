@@ -4,7 +4,7 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen, end_year = 2040, cru_cap = TRUE, w = 0.25, shock = FALSE)
+set_prices(scen, end_year = 2040, cru_cap = TRUE, w = 0.3, shock = FALSE)
 }
 \arguments{
 \item{scen}{scenario}
