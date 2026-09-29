@@ -43,7 +43,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
 
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
-
+  #
   demand <- survey_bills_to_kwh(dep_survey) %>% dplyr::select(serial,kWh)
   #
   agents_in <- dep_survey %>% dplyr::select(serial,q14,q15,q41,Q41_oth,qc1,qg,qi)
@@ -202,6 +202,11 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
   a_s <- agents_in
   n_tou <- dim(a_s %>% dplyr::filter(tariff_plan == "tou" | tariff_plan == "tou_old"))[1]
   n_dynamic <- dim(a_s %>% dplyr::filter(tariff_plan == "dynamic"))[1]
+  #ignore social effect if this applies
+  if (ignore_social) {
+    a_s$q_dyn <- 0
+    a_s$q_tou <- 0
+  }
 
   print(paste("yeartime =", params$yeartime))
   print(paste("number of tou plans", n_tou))
@@ -286,7 +291,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
     }
 
     b_s_3 <- b_s %>%
-      dplyr::select(-annual_bill, -tariff_plan,-ctou_soc,-c_det_soc, -dplyr::any_of(c("CE_tou", "CE_det"))) %>%
+      dplyr::select(-annual_bill, -tariff_plan,-c_tou_soc,-c_det_soc, -dplyr::any_of(c("CE_tou", "CE_det"))) %>%
       dplyr::mutate(res = purrr::pmap(dplyr::pick(dplyr::everything()), evaluate_one)) %>%
       tidyr::unnest(res) %>%
       dplyr::select(-dplyr::any_of("current_plan"))
@@ -334,15 +339,36 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   a_s <- dplyr::filter(a_s, !(serial %in% b_s_3$serial))
   a_s <- dplyr::bind_rows(a_s, b_s_3) %>% dplyr::arrange(serial)
-  a_s <- a_s %>% dplyr::mutate(dep_adopter = (tariff_plan == "dynamic"), tou_adopter = (tariff_plan == "tou"))
 
-  ma <- igraph::as_adjacency_matrix(social_network)
-  g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(a_s, by = "serial")
+  # safe joon
+  g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::select(serial) %>%
+    dplyr::left_join(a_s, by = "serial") %>%
+    dplyr::mutate(
+      dep_adopter = dplyr::coalesce(tariff_plan == "dynamic", FALSE),
+      tou_adopter = dplyr::coalesce(tariff_plan %in% c("tou", "tou_old"), FALSE)
+    )
 
-  dep_adopter_nodes <- igraph::V(g)$dep_adopter == TRUE
-  tou_adopter_nodes <- igraph::V(g)$tou_adopter == TRUE
-  a_s$q_dyn <- as.numeric(ma %*% dep_adopter_nodes)
-  a_s$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
+  #adjacency matrix
+  ma <- igraph::as_adjacency_matrix(g)
+  dep_vec <- as.numeric(igraph::V(g)$dep_adopter)
+  tou_vec <- as.numeric(igraph::V(g)$tou_adopter)
+
+  # peer counts directly on graph nodes
+  g <- g %>% dplyr::mutate(q_dyn = as.numeric(ma %*% dep_vec),q_tou = as.numeric(ma %*% tou_vec))
+
+  #extract node data back to a_s dataframe
+  a_s <- g %>% tibble::as_tibble()
+
+
+  #a_s <- a_s %>% dplyr::mutate(dep_adopter = (tariff_plan == "dynamic"), tou_adopter = (tariff_plan == "tou" | tariff_plan=="tou_old"))
+
+  #ma <- igraph::as_adjacency_matrix(social_network)
+  #g <- social_network %>% tidygraph::activate(nodes) %>% dplyr::left_join(a_s, by = "serial")
+
+  #dep_adopter_nodes <- igraph::V(g)$dep_adopter == TRUE
+  #tou_adopter_nodes <- igraph::V(g)$tou_adopter == TRUE
+  #a_s$q_dyn <- as.numeric(ma %*% dep_adopter_nodes)
+  #a_s$q_tou <- as.numeric(ma %*% tou_adopter_nodes)
 
   if (ignore_social) a_s$q_dyn <- 0
   if (ignore_social) a_s$q_tou <- 0
