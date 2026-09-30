@@ -67,6 +67,7 @@ make_artificial_society <- function(society=society,homophily=homophily,nu=4.5){
 
   #restore
   g <- tidygraph::tbl_graph(nodes=nodes,edges=edges,directed=F,node_key="serial") %>% dplyr::inner_join(society,by="serial")
+  g <- igraph::simplify(g, remove.multiple = TRUE, remove.loops = TRUE) %>% tidygraph::as_tbl_graph()
   return(g)
 
 }
