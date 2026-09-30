@@ -52,13 +52,17 @@ a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_v
 output), and \code{decision} (\code{"flat"}, \code{"tou"}, or \code{"dynamic"})
 }
 \description{
-\code{evaluate_full_cost()} is the similar to \code{evalute_tariffs()} but inclued the bahvioural costs associated with
+\code{evaluate_full_cost()} is the similar to \code{evalute_tariffs()} but includes the bahvioural costs associated with
 the penalty terms in the full cost functional.
 Agents' prospect-theory evaluation of the initial fixed to flexible switching decision. \code{evaluate_tariffs()} uses \code{get_prospect_costs()} (the five annual costs) and \code{get_ce_value()}
 (the certainty-equivalent of each plan), then decides to adopt whichever of \code{tou}
 \code{dynamic} has the most favourable certainty-equivalent gain. If there is no gain, the agents stay on
 \code{flat}. This is the self-contained unit meant to be called once per household from
 \code{update_agents()} in place of the classic savings/social/theta decision.
+}
+\details{
+Note that \code{evaluate_full_cost()} assumes that agent awareness of of dynamic pricing beings at 2026.5 and is complete in 2030. Between
+those times awareness is random.
 }
 \examples{
 prices_scen <- set_prices(sD)

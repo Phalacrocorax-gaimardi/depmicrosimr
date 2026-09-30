@@ -55,8 +55,8 @@ Prospect Value, which is then inverted back into a euro-denominated Certainty Eq
 the guaranteed saving a household would consider exactly as good as the actual uncertain prospect.
 }
 \examples{
-prices_scen <- set_prices(sD)
-params <- scenario_params(sD,2032)
-costs <- get_prospect_costs_light(8760, 0.4, 5, 0.3, 48, "LP1", 2025, prices_scen,params)
-get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.8,0.7,2.25)
+#prices_scen <- set_prices(sD)
+#params <- scenario_params(sD,2032)
+#costs <- get_prospect_costs_light(sD,8760, 0.4, 5, 0.3, 48, "LP1", 2025, prices_scen,params)
+#get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.8,0.7,2.25)
 }
