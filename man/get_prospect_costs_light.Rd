@@ -13,6 +13,7 @@ get_prospect_costs_light(
   tau,
   natural_profile = "LP1",
   smart_rollout,
+  dyn_aware,
   prices_scen,
   params
 )
@@ -33,6 +34,8 @@ get_prospect_costs_light(
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
 \item{smart_rollout}{smart meter rollout time}
+
+\item{dyn_aware}{year of dynmaic choice awareness}
 
 \item{prices_scen}{price scenario}
 
@@ -68,6 +71,6 @@ yet available are \code{NA}; their profiles are simply absent from the returned 
 # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2031)
-get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020, prices_scen,params)
+get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020,dyn_aware=2027, prices_scen,params)
 
 }

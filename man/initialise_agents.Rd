@@ -30,17 +30,20 @@ initialise_agents(
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
 }
 \description{
-initialise_agents() sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
+\code{initialise_agents()} sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
 \cr
-The stated household "flexibility" inferred from survey are normally distributed around zero. These assumed to represent logarithms of hourly flexibility in response to
-ToU pricing. This flexibility score index lies between 0 & 1.
-\deqn{\frac{1}{2} \frac{ \sum_t | l(t)-l^0(t) |}{\sum_t l^0(t)} }\cr
+Household "stated flexibility" scores are inferred from responses survey questions. These scores are normally distributed around zero. A flexibility score in response to
+ToU pricing can be defined as the hourly annual sum.
+\deqn{\frac{1}{2} \sum_t | \hat{l}(t)-\hat{l}^0(t) | }
+where \eqn{\hat{l}(t)} and \eqn{\hat{l}^0(t)} are the load-shifted and flat-price ("natural") load profiles. This flexibility score index lies between 0 & 1 and can ve computed
+using \code{get_flex()} using 2026 prices, for example. \code{initialise_agents()} maps stated flexibilities to hourly flexibility scores using a Beta distribution in the range \eqn{[0,f_{max}]}. This means that
+hourly flexibility scores are defined for each agent.\cr
 \cr
-4-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}) and the load mean reversion timescale (\eqn{\tau}).The current version fixes
-adjusts \eqn{\gamma} and \eqn{\eta} so that the \emph{aggregate} flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
-in flexibility is described by \eqn{\phi-\tau} parameter pair. In general the aggregrate flexibilty is lower than the weighted sum of household flexibilities
-\deqn{f_{aggregate} < sum_i^N w_i f_i} weighted by the individual household annual demand.
+The flexibility cost model used by \code{depmicrosimr} uses four parameters. These are an inflexible load fraction (\eqn{\phi}), a ramping cost parameter (\eqn{\eta}),
+a load-shifting cost parameter (\eqn{\gamma}), and a load reversion timescale (\eqn{\tau}) (see \code{get_flex()}. The parameters \eqn{\gamma,\tau} are set stochastically based on the derived flexibility scores, with
+\eqn{\phi} and \eqn{\eta} are fixed.The latter parameters are adjusted so that the \emph{aggregate} flexibility matches the difference between 2026 LP1 ("flat") and LP2("ToU") profiles. The hetereogenity
+in flexibility is described by \eqn{\gamma-\tau} parameter pair. From the triangular inequality, aggregrate flexibilty is lower than the weighted sum of household flexibilities
+\deqn{f_{aggregate} < \sum_i^N w_i f_i} (weighted by the individual household annual demand). This means that there is a one-to-many mapping between the derived flexibility scores characteristic to each household and the model flexibility parameters.
 }
 \details{
 \cr
@@ -49,6 +52,8 @@ Start year (default 2019) is assumed to be before the beginning smart meter roll
 \cr
 \cr
 The network input is used to determine the social degree of each agent (correlated with but not identical to the stated degree).
+
+Each agent becomes aware of the existence of DEP as a tariff choice at a random time between 2026.5 and \code{dyn_aware_year}.
 }
 \examples{
 prices_scen <- set_prices(sD)

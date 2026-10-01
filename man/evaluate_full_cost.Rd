@@ -13,6 +13,7 @@ evaluate_full_cost(
   tau,
   natural_profile = "LP1",
   smart_rollout,
+  dyn_aware,
   flex_certainty_tou = 0.8,
   flex_certainty_det = 0.7,
   lambda = 2.25,
@@ -36,6 +37,8 @@ evaluate_full_cost(
 \item{natural_profile}{the characteristic profile of the household (currently LP1 or LP3)}
 
 \item{smart_rollout}{smart meter rollout time}
+
+\item{dyn_aware}{year agent becomes aware of dynamic tariff choice}
 
 \item{flex_certainty_tou}{confidence in tou flexibility}
 
@@ -67,6 +70,6 @@ those times awareness is random.
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2032)
-evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
-evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
+evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
+evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
 }

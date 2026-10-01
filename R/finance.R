@@ -762,6 +762,7 @@ get_prospect_costs <- function(kWh, phi, gamma, eta, tau, natural_profile = "LP1
 #' @param tau \eqn{\tau}
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
 #' @param smart_rollout smart meter rollout time
+#' @param dyn_aware year of dynmaic choice awareness
 #' @param prices_scen price scenario
 #' @param params scenario parameters at yeartime
 #'
@@ -776,9 +777,9 @@ get_prospect_costs <- function(kWh, phi, gamma, eta, tau, natural_profile = "LP1
 #' # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2031)
-#' get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020, prices_scen,params)
+#' get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020,dyn_aware=2027, prices_scen,params)
 #'
-get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout, prices_scen,params) {
+get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout, dyn_aware,prices_scen,params) {
 
   stopifnot(tolower(natural_profile) %in% c("lp1", "lp3"))
   profile <- tolower(natural_profile)
@@ -786,8 +787,8 @@ get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_pro
 
   dyn_full_aware_year <- scen %>% dplyr::filter(parameter=="dyn_aware_year") %>% dplyr::pull(value)
   #
-  aware_yeartime <- runif(n=1,2026.5,dyn_full_aware_year)
-  plans <- if (yeartime >= aware_yeartime) {
+  #aware_yeartime <- runif(n=1,2026.5,dyn_full_aware_year)
+  plans <- if (yeartime >= dyn_aware) {
     c("flat", "tou", "dynamic")
   } else if (yeartime < smart_rollout) {
     c("flat")
@@ -946,6 +947,7 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' @param tau \eqn{\tau}
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
 #' @param smart_rollout smart meter rollout time
+#' @param dyn_aware dynamic tariff awareness time
 #' @param flex_certainty_tou confidence in tou flexibility
 #' @param flex_certainty_det confidence in det flexibility
 #' @param lambda loss aversion
@@ -959,10 +961,10 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2032)
-#' evaluate_tariffs(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.6,0.5,10.25,prices_scen = prices_scen,params)
-evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
+#' evaluate_tariffs(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.6,0.5,10.25,prices_scen = prices_scen,params)
+evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
 
-  costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, prices_scen,params)
+  costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, dyn_aware,prices_scen,params)
   #print(costs)
   #certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
   #certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
@@ -1010,6 +1012,7 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' @param tau \eqn{\tau}
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
 #' @param smart_rollout smart meter rollout time
+#' @param dyn_aware year agent becomes aware of dynamic tariff choice
 #' @param flex_certainty_tou confidence in tou flexibility
 #' @param flex_certainty_det confidence in det flexibility
 #' @param lambda loss aversion
@@ -1023,9 +1026,9 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2032)
-#' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
-#' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,0.55,0.4,2.25,prices_scen = prices_scen,params)
-evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
+#' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
+#' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
+evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
 
   costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
 
@@ -1037,9 +1040,7 @@ evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile =
     costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
   }
 
-  dyn_full_aware_year <- scen %>% dplyr::filter(parameter=="dyn_aware_year") %>% dplyr::pull(value)
-  aware_yeartime <- runif(n=1,2026.5,dyn_full_aware_year)
-  if(params$yeartime >= aware_yeartime){
+  if(params$yeartime >= dyn_aware){
     costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
     costs$det_noflex <- costs_det$annual_bill_inflexible
     costs$det_flex <- costs_det$annual_bill_flexible+costs_det$penalty+costs_det$kinetic

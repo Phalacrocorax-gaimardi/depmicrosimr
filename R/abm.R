@@ -4,17 +4,21 @@
 
 #' initialise_agents
 #'
-#' initialise_agents() sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
+#' \code{initialise_agents()} sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr
 #' \cr
-#' The stated household "flexibility" inferred from survey are normally distributed around zero. These assumed to represent logarithms of hourly flexibility in response to
-#' ToU pricing. This flexibility score index lies between 0 & 1.
-#' \deqn{\frac{1}{2} \frac{ \sum_t | l(t)-l^0(t) |}{\sum_t l^0(t)} }\cr
+#' Household "stated flexibility" scores are inferred from responses survey questions. These scores are normally distributed around zero. A flexibility score in response to
+#' ToU pricing can be defined as the hourly annual sum.
+#' \deqn{\frac{1}{2} \sum_t | \hat{l}(t)-\hat{l}^0(t) | }
+#' where \eqn{\hat{l}(t)} and \eqn{\hat{l}^0(t)} are the load-shifted and flat-price ("natural") load profiles. This flexibility score index lies between 0 & 1 and can ve computed
+#' using \code{get_flex()} using 2026 prices, for example. \code{initialise_agents()} maps stated flexibilities to hourly flexibility scores using a Beta distribution in the range \eqn{[0,f_{max}]}. This means that
+#' hourly flexibility scores are defined for each agent.\cr
 #' \cr
-#' 4-flexibility parameters are initialised based on household flexibility scores. These are an inflexible load fraction (\eqn{\phi}),
-#' a cost parameter (\eqn{\gamma}), kinetic parameter (\eqn{\eta}) and the load mean reversion timescale (\eqn{\tau}).The current version fixes
-#' adjusts \eqn{\gamma} and \eqn{\eta} so that the *aggregate* flexibility matches the difference between 2026 LP1 and LP2 profiles. The heterogenity
-#' in flexibility is described by \eqn{\phi-\tau} parameter pair. In general the aggregrate flexibilty is lower than the weighted sum of household flexibilities
-#' \deqn{f_{aggregate} < sum_i^N w_i f_i} weighted by the individual household annual demand.
+#' The flexibility cost model used by \code{depmicrosimr} uses four parameters. These are an inflexible load fraction (\eqn{\phi}), a ramping cost parameter (\eqn{\eta}),
+#' a load-shifting cost parameter (\eqn{\gamma}), and a load reversion timescale (\eqn{\tau}) (see \code{get_flex()}. The parameters \eqn{\gamma,\tau} are set stochastically based on the derived flexibility scores, with
+#' \eqn{\phi} and \eqn{\eta} are fixed.The latter parameters are adjusted so that the *aggregate* flexibility matches the difference between 2026 LP1 ("flat") and LP2("ToU") profiles. The hetereogenity
+#' in flexibility is described by \eqn{\gamma-\tau} parameter pair. From the triangular inequality, aggregrate flexibilty is lower than the weighted sum of household flexibilities
+#' \deqn{f_{aggregate} < \sum_i^N w_i f_i} (weighted by the individual household annual demand). This means that there is a one-to-many mapping between the derived flexibility scores characteristic to each household and the model flexibility parameters.
+#'
 #'
 #' \cr
 #' \cr
@@ -23,7 +27,7 @@
 #' \cr
 #' The network input is used to determine the social degree of each agent (correlated with but not identical to the stated degree).
 #'
-#'
+#' Each agent becomes aware of the existence of DEP as a tariff choice at a random time between 2026.5 and \code{dyn_aware_year}.
 #'
 #' @param scen scenario design dataframe e.g. sD
 #' @param start_year default 2019
@@ -146,7 +150,9 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   agents_in <- agents_in %>% dplyr::mutate(c_tou_soc=c_tou + ifelse(degree == 0, 0, pmin(1,q_tou/ degree)) * max(0, c_tou_max - c_tou))
 
   agents_in$c_det_soc <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
-
+  #dynamic tariffs awareness
+  dyn_full_aware_year <- scen %>% dplyr::filter(parameter=="dyn_aware_year") %>% dplyr::pull(value)
+  agents_in$dyn_aware <-runif(dim(agents_in)[1],2026.5,dyn_full_aware_year)
 
 
   #add survey the network degree if desired
@@ -266,7 +272,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   } else if (behavioural_model == "prospect") {
 
-    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, current_plan, degree, q_tou, q_dyn, ...) {
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout,dyn_aware, current_plan, degree, q_tou, q_dyn, ...) {
       #c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
       #c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
       #c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
@@ -274,7 +280,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
       c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
-      result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+      result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params)
 
       new_plan <- result$decision
       new_bill <- switch(new_plan,
@@ -298,12 +304,12 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   } else if (behavioural_model == "full") {
 
-    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, current_plan, degree, q_tou, q_dyn, ...) {
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, dyn_aware,current_plan, degree, q_tou, q_dyn, ...) {
 
       c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
-      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params)
 
       new_plan <- result$decision
       new_bill <- switch(new_plan,
