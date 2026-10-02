@@ -2,7 +2,7 @@
 % Please edit documentation in R/technicals.R
 \name{get_full_annual_cost}
 \alias{get_full_annual_cost}
-\title{get_full_cost}
+\title{get_full_annual_cost}
 \usage{
 get_full_annual_cost(
   kWh = 4200,

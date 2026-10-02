@@ -724,10 +724,10 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
 
   #Scale parameter by the flexible load
-  gamma_scaled <- gamma * (8760 / kWh)
-  eta_scaled   <- eta * (8760 / kWh)
+  #gamma_scaled <- gamma * (8760 / kWh)
+  #eta_scaled   <- eta * (8760 / kWh)
   if (tariff_plan != "flat"){
-    df <- get_flex(df, phi, gamma_scaled, eta_scaled, tau)
+    df <- get_flex(df, phi, gamma, eta, tau)
     df <- df |> dplyr::select(datetime,price,load,load_opt) |> dplyr::rename("natural_load"=load,"optimised_load"=load_opt)}
   else{
 
@@ -825,7 +825,7 @@ get_aggregate_profile <- function(year, abm, prices_scen, use_parallel = TRUE, n
   return(res)
 }
 
-#' get_full_cost
+#' get_full_annual_cost
 #'
 #' \code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
 #'
@@ -864,11 +864,9 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.
   start_time <- lubridate::date_decimal(yeartime)
   end_time   <- lubridate::date_decimal(yeartime + 1)
 
-  # 2. Extract matching records
   df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
                                         datetime <= end_time)
 
-  # 3. Vectorized baseline load adjustment
   df$load <- df[[profile]] * kWh
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
 
@@ -891,14 +889,14 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.
   frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
 
   #Scale parameter by the flexible load to get correct dimenions
-  p_ref <- median(df$price)
-  L_ref <- mean(df$load)*(1-phi)
+  #p_ref <- median(df$price)
+  #L_ref <- mean(df$load)*(1-phi)
 
-  # 2. Convert Dimensionless (gamma, eta) to Dimensionful Parameters
+  # Convert Dimensionless (gamma, eta) to Dimensionful Parameters
   # Units of dim_scale are [Currency / kW^2]
-  parameter_scaling <- p_ref / L_ref
-  gamma_scaled <- gamma*parameter_scaling/frob_sq
-  eta_scaled   <- eta*parameter_scaling
+  parameter_scaling <- (8760/sum(df$load))
+  eta_scaled <- eta * parameter_scaling
+  gamma_scaled <- gamma / frob_sq * parameter_scaling
   #compute x K^T K x
   compute_behavioural_cost <- function(x, tau) {
     N <- length(x)
@@ -927,13 +925,13 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.
     return(sum(y^2))
   }
 
-  # 5. Calculate flexible loads conditionally
+  #flexible loads conditionally
   if (tariff_plan != "flat") {
     df <- get_flex(df, phi, gamma, eta, tau,kernel)
     bill_inflex <- sum(df$price * df$load) + standing_charge
     bill_flex   <- sum(df$price * df$load_opt) + standing_charge
-    ramping_cost <- eta_scaled * sum(diff(df$x)^2)
-    behavioural_cost <- gamma_scaled*compute_behavioural_cost(df$x,tau)
+    ramping_cost <- 0.5*eta_scaled * sum(diff(df$x)^2)
+    behavioural_cost <- 0.5*gamma_scaled*compute_behavioural_cost(df$x,tau)
   } else {
     # For flat tariffs, inflexible and flexible loads are identical
     bill_inflex <- sum(df$price * df$load) + standing_charge
@@ -942,8 +940,6 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.
     behavioural_cost <- 0
   }
 
-
-  # 6. Return the final dataframe cleanly (No pipes on the return statement!)
   return(
     data.frame(
       tariff_plan            = tariff_plan,
