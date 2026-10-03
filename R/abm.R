@@ -409,7 +409,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=0.3,quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=0.33,quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE

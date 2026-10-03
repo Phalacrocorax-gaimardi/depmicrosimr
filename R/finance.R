@@ -63,9 +63,9 @@
 #' demand <- set_prices(sD)
 #' demand <- demand %>% dplyr::filter(lubridate::year(datetime)==2026)
 #' demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
-#' demand <- demand %>% dplyr::mutate(load=8760*lp1) %>% dplyr::select(-lp1)
+#' demand <- demand %>% dplyr::mutate(load=4200*lp1) %>% dplyr::select(-lp1)
 #' demand <- demand %>% dplyr::filter(tariff_plan=="tou") %>% dplyr::select(datetime,price,load)
-#' test <- get_flex(demand,phi=0.5,gamma=1,eta=0.5,tau=48,kernel="exp")
+#' test <- get_flex(demand,phi=0.4,gamma=5,eta=0.3,tau=72)
 #' 100*sum(abs(test$load_opt-test$load))/8760
 get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="exp",precision=1e-4) {
   # T = Total horizon in hours
@@ -183,7 +183,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
   settings <- osqp::osqpSettings(eps_abs = precision, eps_rel = precision, verbose = FALSE,max_iter = 10000)
   model <- osqp::osqp(P = P, q = q, A = A, l = l, u = u, pars = settings)
   res <- model@Solve()
-
+  #print(paste("optimised full cost savings",round(res$info$obj_val),"euros"))
   # 6. Post-processing
   x_opt <- res$x
   demand$x <- x_opt
@@ -196,6 +196,141 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
   demand <- demand %>% dplyr::select(-hour,-f,-phi_t)
   return(demand)
 }
+
+#' get_full_annual_cost
+#'
+#' \code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
+#'
+#' @param kWh annual kWh
+#' @param tariff_plan tariff plan
+#' @param phi inflexible fraction
+#' @param gamma dimensionless cost penalty
+#' @param eta dimensionless ramping penalty
+#' @param tau energy recovery horizon
+#' @param natural_profile L1 or LP3 at the moment
+#' @param prices_scen price scenario
+#' @param params parameters at yeartime
+#'
+#' @returns dataframe with cost breakdown
+#' @export
+#'
+#' @examples
+#' prices_scen <- set_prices(sD)
+#' params <- scenario_params(sD,2026)
+#' #get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
+#' get_full_annual_cost(8760,"tou",phi=0.4,gamma=5,eta=0.3,tau=24,"LP1",prices_scen,params)
+#' #get_full_annual_cost(8760,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+#' #get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.3, tau=36,natural_profile="LP1", prices_scen,params) {
+  #
+  stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
+  yeartime <- params$yeartime
+  kernel="exp"
+
+  standing_charge <- params[[paste0("standing_charge_", tariff_plan)]]
+  profile <- tolower(natural_profile)
+  load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
+  #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
+  prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
+  # 1. Fast date boundary calculation
+  start_time <- lubridate::date_decimal(yeartime)
+  end_time   <- lubridate::date_decimal(yeartime + 1)
+
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
+                                        datetime <= end_time)
+
+  df$load <- df[[profile]] * kWh
+  df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
+
+
+  W <- ceiling(5 * tau) #might not be great for cauchy kernel
+  lags <- 0:W
+  plags <- sqrt(5) * lags / (0.8385*tau) #used to ensure matern integrates to tau
+  #scale_parameter <- tau/gamma(1+1/shape_parameter)
+  #kernel_values <- exp(-(lags / scale_parameter)^shape_parameter)
+  kernel_values <- if(kernel=="matern") {
+    (1 + plags + (plags^2) / 3) * exp(-plags)
+  } else if(kernel=="cauchy") {
+    1/(1+(lags/(0.6366*tau))^2)
+  } else if(kernel=="exp"){
+    exp(-(lags /tau))
+  } else {
+    exp(-(lags/(1.128*tau))^2)
+  }
+  #frobenius scaling L2
+  frob_sq <- sum(kernel_values^2) + sum(kernel_values[-1]^2)
+
+  #Scale parameter by the flexible load to get correct dimenions
+  #p_ref <- median(df$price)
+  #L_ref <- mean(df$load)*(1-phi)
+
+  # Convert Dimensionless (gamma, eta) to Dimensionful Parameters
+  # Units of dim_scale are [Currency / kW^2]
+  parameter_scaling <- (8760/sum(df$load))
+  eta_scaled <- eta * parameter_scaling
+  gamma_scaled <- gamma / frob_sq * parameter_scaling
+  #compute x K^T K x
+  compute_behavioural_cost <- function(x, tau) {
+    N <- length(x)
+    r <- exp(-1 / tau)
+
+    # Forward pass: sum_{k <= t} r^(t - k) * x_k
+    a <- numeric(N)
+    a[1] <- x[1]
+    for (t in 2:N) {
+      a[t] <- x[t] + r * a[t - 1]
+    }
+
+    # Backward pass: sum_{k > t} r^(k - t) * x_k
+    b <- numeric(N)
+    b[N] <- 0
+    if (N > 1) {
+      for (t in (N - 1):1) {
+        b[t] <- r * (b[t + 1] + x[t + 1])
+      }
+    }
+
+    # y = K %*% x
+    y <- a + b
+
+    # Return x^T K^T K x = sum(y^2)
+    return(sum(y^2))
+  }
+
+  #flexible loads conditionally
+  if (tariff_plan != "flat") {
+    df <- get_flex(df, phi, gamma, eta, tau,kernel)
+    bill_inflex <- sum(df$price * df$load) + standing_charge
+    bill_flex   <- sum(df$price * df$load_opt) + standing_charge
+    ramping_cost <- 0.5*eta_scaled * sum(diff(df$x)^2)
+    behavioural_cost <- 0.5*gamma_scaled*compute_behavioural_cost(df$x,tau)
+  } else {
+    # For flat tariffs, inflexible and flexible loads are identical
+    bill_inflex <- sum(df$price * df$load) + standing_charge
+    bill_flex   <- bill_inflex
+    ramping_cost <- 0
+    behavioural_cost <- 0
+  }
+
+  return(
+    data.frame(
+      tariff_plan            = tariff_plan,
+      kWh=kWh,
+      phi = phi,
+      gamma = gamma,
+      eta=eta,
+      tau=tau,
+      annual_bill_inflexible = bill_inflex,
+      annual_bill_flexible   = bill_flex,
+      fin_gain                   = round(bill_flex - bill_inflex),
+      penalty = behavioural_cost,
+      kinetic = ramping_cost,
+      real_gain =  round(bill_flex +behavioural_cost+ramping_cost- bill_inflex)
+
+    )
+  )
+}
+
 
 
 #' get_annual_cost
@@ -470,7 +605,7 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.3,shock=FALSE){
+set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.33,shock=FALSE){
   #
   wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")

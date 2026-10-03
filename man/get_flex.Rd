@@ -71,8 +71,8 @@ Depending in user intent, two parameter scaling models are implemented - "
 demand <- set_prices(sD)
 demand <- demand \%>\% dplyr::filter(lubridate::year(datetime)==2026)
 demand <- demand \%>\% dplyr::inner_join(load_profiles_generalised \%>\% dplyr::select(datetime,lp1))
-demand <- demand \%>\% dplyr::mutate(load=8760*lp1) \%>\% dplyr::select(-lp1)
+demand <- demand \%>\% dplyr::mutate(load=4200*lp1) \%>\% dplyr::select(-lp1)
 demand <- demand \%>\% dplyr::filter(tariff_plan=="tou") \%>\% dplyr::select(datetime,price,load)
-test <- get_flex(demand,phi=0.5,gamma=1,eta=0.5,tau=48,kernel="exp")
+test <- get_flex(demand,phi=0.4,gamma=5,eta=0.3,tau=72)
 100*sum(abs(test$load_opt-test$load))/8760
 }
