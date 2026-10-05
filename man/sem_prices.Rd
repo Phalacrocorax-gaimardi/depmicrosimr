@@ -32,7 +32,7 @@ a log transformation for prices greater than \eqn{scale}.
 pre 2026\cr
 }
 \examples{
-sem_prices(sD)
+sem_prices(sD,2042)
 sem_prices(sD,shock=TRUE)
 
 }

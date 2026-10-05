@@ -595,7 +595,7 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #' Flat and ToU tariffs can be set retrospectively or based on forecast prices. Probably, retrospective price setting is best.
 #'
 #' @param scen scenario
-#' @param end_year last full year for simulation
+#' @param end_year last full year for price simulation, set to 2045 by default
 #' @param cru_cap Boolean, defaults to TRUE
 #' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
 #' @param shock if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030
@@ -605,7 +605,7 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2040,cru_cap=TRUE,w=0.33,shock=FALSE){
+set_prices <- function(scen,end_year=2045,cru_cap=TRUE,w=0.33,shock=FALSE){
   #
   wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")

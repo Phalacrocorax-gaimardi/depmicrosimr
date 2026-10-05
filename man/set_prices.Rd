@@ -4,12 +4,12 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen, end_year = 2040, cru_cap = TRUE, w = 0.33, shock = FALSE)
+set_prices(scen, end_year = 2045, cru_cap = TRUE, w = 0.33, shock = FALSE)
 }
 \arguments{
 \item{scen}{scenario}
 
-\item{end_year}{last full year for simulation}
+\item{end_year}{last full year for price simulation, set to 2045 by default}
 
 \item{cru_cap}{Boolean, defaults to TRUE}
 

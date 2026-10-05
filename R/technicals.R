@@ -474,7 +474,7 @@ simulate_hmm <- function(n_steps, hmm_fit) {
 #' @export
 #'
 #' @examples
-#' sem_prices(sD)
+#' sem_prices(sD,2042)
 #' sem_prices(sD,shock=TRUE)
 #'
 sem_prices <- function(scen,end_year=2040,shock=FALSE){
@@ -543,7 +543,9 @@ sem_prices <- function(scen,end_year=2040,shock=FALSE){
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2030-12-31 23:00:00",asinh(sem_trend_price_2030/scale0)))
   #wholesale price 200
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime=="2040-12-31 23:00:00",asinh(sem_trend_price_2040/scale0)))
-  #linearly interp
+  #add flat prices post 2040
+  if(end_year > 2040) trend_logprices <- trend_logprices %>% dplyr::mutate(trend=replace(trend, datetime==paste(end_year,"-12-31 23:00:00",sep=""),asinh(sem_trend_price_2040/scale0)))
+
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
   #optionally add a wholesale price shock in 2030 modelled as a half exponential
   if(shock) {
