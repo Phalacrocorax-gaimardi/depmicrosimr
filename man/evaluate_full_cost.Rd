@@ -64,7 +64,7 @@ Agents' prospect-theory evaluation of the initial fixed to flexible switching de
 \code{update_agents()} in place of the classic savings/social/theta decision.
 }
 \details{
-Note that \code{evaluate_full_cost()} assumes that agent awareness of of dynamic pricing beings at 2026.5 and is complete in 2030. Between
+Note that \code{evaluate_full_cost()} assumes that agent awareness of of dynamic pricing beings at 2026.5 and is complete at \code{dyn_aware_year}. Between
 those times awareness is random.
 }
 \examples{

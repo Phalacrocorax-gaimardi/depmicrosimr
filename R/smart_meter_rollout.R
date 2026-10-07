@@ -6,5 +6,5 @@
 #'   \item{\code{area}}{character urban or rural}
 #'   \item{\code{rollout}}{double decimal time}
 #'}
-#' @details compiled using gemini AI
+#' @details compiled fomr underlying ESBN and CRY documents using gemini AI
 "smart_meter_rollout"

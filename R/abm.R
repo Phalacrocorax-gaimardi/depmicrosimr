@@ -401,15 +401,14 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 #' @param ignore_social if TRUE ignore social network effects. Default is FALSE
 #' @param behavioural_model choose "classic" or "prospect" (default) or "full"
 #' @param shock if TRUE a 2030 x4 shock is included
-#' @param w (1-w) is flexibility benefit pass-through (seen by agent)
 #' @param quiet if TRUE messaging is reduced
 #'
-#' @return a three component list - simulation output, scenario setup, meta-parameters
+#' @return a four component list - simulation output, scenario setup, meta-parameters, seeds for set_prices()
 #' @export
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE, w=0.33,quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE,quiet=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
@@ -425,13 +424,19 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
   #seai_elec <- pvbessmicrosimr::seai_elec
   #bi-monthly runs
   Nt <- round((simulation_end-year_zero+1)*6)
+  #seeds for prices_scen reproducibility
+  run_seeds <- sample.int(.Machine$integer.max, Nrun)
+
   #single worker (abm run idex j)
   run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,shock,w,quiet){
 
     print(paste("Generating price simulation for run",j,"...."))
-    prices_scen <- set_prices(scen,cru_cap = TRUE,w = w,shock=shock)
+    prices_scen <- set_prices(scen,cru_cap = TRUE,shock=shock)
     #
     print(paste("Generating social network for run",j,"...."))
+    #set seed
+    set.seed(run_seeds[j])
+
     if(!resample_society) social <- make_artificial_society(dep_society_1,homophily,4.5)
 
     if(resample_society){
@@ -451,7 +456,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
       #
       #yeartime <- year_zero+(t-1)
       yeartime <- year_zero+(t-1)/6
-      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social,behavioural_model,quiet) #static socal network, everything else static
+      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social=ignore_social,behavioural_model=behavioural_model,quiet=quiet) #static socal network, everything else static
       #agent_ts[[t]] <- tibble::tibble(t=t)
     }
 
@@ -515,7 +520,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
-    return(list("abm"=abm,"scenario"=scen,"system"=meta))
+    return(list("abm"=abm,"scenario"=scen,"system"=meta,"seeds"=run_seeds))
   }
 
 

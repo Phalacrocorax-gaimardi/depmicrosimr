@@ -38,13 +38,11 @@ scenario_params <- function(scenario,yeartime){
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_flat", value =  standing_charge_fun(scenario,yeartime,"flat")))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_tou", value =  standing_charge_fun(scenario,yeartime,"tou")))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="standing_charge_dynamic", value =  standing_charge_fun(scenario,yeartime,"dynamic")))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="p.", value =  dplyr::filter(scenario, parameter=="p.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(scenario, parameter=="rho.")$value))
-  scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="delta.", value =  dplyr::filter(scenario, parameter=="delta.")$value))
+  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="nu.", value =  dplyr::filter(scenario, parameter=="nu.")$value))
+  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="rho.", value =  dplyr::filter(scenario, parameter=="rho.")$value))
+  #scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="delta.", value =  dplyr::filter(scenario, parameter=="delta.")$value))
   scen <- dplyr::bind_rows(scen,tibble::tibble(parameter="s.", value =  dplyr::filter(scenario, parameter=="s.")$value))
-
 
   #return(scen)
   return(scen %>% fast_params())
@@ -55,11 +53,12 @@ scenario_params <- function(scenario,yeartime){
 #' helper function to convert a long format dataframe to an environment object, used for fast access to scenario parameters
 #'
 #' @param params_long long format dataframe with columns "parameter" and "value"
+#' @noRd
 #'
 #' @return environment object
-#' @export
 #'
 #' @examples
+#'
 fast_params <- function(params_long){
 
   test <- as.list(params_long$value)
@@ -158,19 +157,19 @@ survey_bills_to_kwh <- function(data_in, lag_D=30){
 #' @param D_max maxiumum demand in kWh
 #' @param D_min minimum demand in kWh
 #' @param lag_D lag (in days) default 30
+#' @noRd
 #'
 #' @return daily kWh demand
-#' @export
 #'
 #' @examples
 #'
-#' sapply(1:365,function(d) demand_fun(d,14,11,30 ))
+#' #sapply(1:365,function(d) demand_fun(d,14,11,30 ))
 demand_fun <- function(day, D_max,D_min,lag_D=30){
 
   #the demand function peaks in winter months
   phase_D=lag_D/360*2*pi
 
-  (D_max + D_min)/2 + (D_max-D_min)/2*cos(2*pi*day/365-phase_D) %>% return()
+  return((D_max + D_min)/2 + (D_max-D_min)/2*cos(2*pi*day/365-phase_D))
 }
 
 #' get_demand_params
@@ -648,13 +647,14 @@ match_flex_params <- function(x,score_cube){
 #' roundr
 #'
 #' stochastic round
+#'
 #' @param x real
+#' @noRd
 #'
 #' @returns integer
-#' @export
 #'
 #' @examples
-#' replicate(100,roundr(2.5)) |> mean()
+#' #replicate(100,roundr(2.5)) |> mean()
 roundr <- function (x)
 {
   x1 <- trunc(x)
@@ -744,8 +744,8 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
 #' get_aggregate_profile
 #'
 #' returns the aggregate hourly load implied by the ABM output. This function uses parallel::mclapply and runs
-#' on MacOS/Linux.
-#'
+#' on MacOS/Linux.\cr
+#' \cr
 #'
 #' @param year integer year
 #' @param abm abm output dataframe
@@ -753,7 +753,7 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
 #' @param use_parallel use parallel
 #' @param n_cores usually parallel::detectCores() - 2 or similar
 #'
-#' @returns a dataframe
+#' @returns a dataframe with aggregate profile components by tariff
 #' @export
 #'
 #' @examples
@@ -835,6 +835,8 @@ get_aggregate_profile <- function(year, abm, prices_scen, use_parallel = TRUE, n
 #' \deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year. This is the same as \eqn{\frac{1}{2} \sum_t \mid x_t \mid} (see \code{get_flex})\cr
 #' \cr
 #' The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
+#' \cr
+#' Based on the LP1 profile (2026 urban flat rate)
 #'
 #' @param scen scenario
 #' @param year year of evaluation
@@ -845,21 +847,20 @@ get_aggregate_profile <- function(year, abm, prices_scen, use_parallel = TRUE, n
 #' @param eta kinetic cost parameter
 #' @param tau load-shift time horizon
 #' @param kernel defaut to "exp"
-#' @param profile LP1 or LP3
 #' @param prices_scen price scenario
 #'
-#' @returns
+#' @returns a single row dataframe
 #' @export
 #'
 #' @examples
-#' prices_scen <- set_prices(sD)
-#' get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp","LP1",prices_scen)
-#' get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
+#' #prices_scen <- set_prices(sD)
+#' #get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp",prices_scen)
+#' #get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp",prices_scen)
 #'
-get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,profile="LP1",prices_scen){
+get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,prices_scen){
   #
   demand <- prices_scen %>% dplyr::filter(lubridate::year(datetime)==year)
-  demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,tolower(profile)))
+  demand <- demand %>% dplyr::inner_join(load_profiles_generalised %>% dplyr::select(datetime,lp1))
   demand <- demand %>% dplyr::mutate(load=kWh*lp1) %>% dplyr::select(-lp1)
   demand <- demand %>% dplyr::filter(tariff_plan==.env$tariff_plan) %>% dplyr::select(datetime,price,load)
   flex <- get_flex(demand,phi,gamma,eta,tau,kernel,precision = 1e-3)
@@ -877,7 +878,7 @@ get_flex_scores <- function(scen,year,kWh,tariff_plan,phi,gamma,eta,tau,kernel,p
   flex_interday <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
   flex1 <- flex %>% dplyr::group_by(lubridate::week(datetime)) %>% dplyr::summarise(load=sum(load),load_opt=sum(load_opt))
   flex_interweek <- 100*sum(abs(flex1$load_opt-flex1$load))/kWh
-  tibble::tibble(tariff_plan=tariff_plan,profile=profile,phi=phi,gamma=gamma,eta=eta,tau=tau,flex_1hr=flex_1hr,flex_3hr=flex_3hr,flex_6hr=flex_6hr,flex_12hr=flex_12hr,flex_24hr=flex_24hr,flex_day=flex_interday,flex_week=flex_interweek)
+  tibble::tibble(tariff_plan=tariff_plan,profile="lp1",phi=phi,gamma=gamma,eta=eta,tau=tau,flex_1hr=flex_1hr,flex_3hr=flex_3hr,flex_6hr=flex_6hr,flex_12hr=flex_12hr,flex_24hr=flex_24hr,flex_day=flex_interday,flex_week=flex_interweek)
 }
 
 

@@ -4,7 +4,7 @@
 \alias{set_prices}
 \title{set_prices}
 \usage{
-set_prices(scen, end_year = 2045, cru_cap = TRUE, w = 0.33, shock = FALSE)
+set_prices(scen, end_year = 2045, cru_cap = TRUE, shock = FALSE)
 }
 \arguments{
 \item{scen}{scenario}
@@ -13,9 +13,10 @@ set_prices(scen, end_year = 2045, cru_cap = TRUE, w = 0.33, shock = FALSE)
 
 \item{cru_cap}{Boolean, defaults to TRUE}
 
-\item{w}{fraction of gains from flexibility that retail suppliers not passed on (default 1/3)}
-
 \item{shock}{if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030}
+}
+\value{
+a eight-column dataframe of load_profiles,price, tariff_plan and HMM state
 }
 \description{
 \code{set_prices()} is a \emph{retail} electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of

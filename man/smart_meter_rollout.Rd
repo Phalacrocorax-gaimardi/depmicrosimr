@@ -19,6 +19,6 @@ smart_meter_rollout
 estimated median time of smart meter rollout by area type and county. Used by initialise_agents().
 }
 \details{
-compiled using gemini AI
+compiled fomr underlying ESBN and CRY documents using gemini AI
 }
 \keyword{datasets}

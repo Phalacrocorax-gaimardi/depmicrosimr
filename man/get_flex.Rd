@@ -25,12 +25,13 @@ get_flex(
 
 \item{tau}{flexibility time horizon in hours}
 
-\item{kernel}{choice of "matern", "exponential", "cauchy","gauss" (both have single lifetime tau)}
+\item{kernel}{choice of "matern", "exp", "cauchy","gauss" (both have single lifetime tau)}
 
 \item{precision}{desired solver precision}
 }
 \value{
-a 2-column dataframe of datetime and perturbed load
+a 7-column dataframe of datetime, price, unperturbed load, flexible share of unperturbed load,
+load-shift x, optimised load, and inflexible load
 }
 \description{
 get_flex solves for the flexible hourly household load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
@@ -55,7 +56,7 @@ is a stiffness term that limits load-shifting over a timescale \eqn{\tau} but in
 \cr
 The cost parameters  are defined for a standard annual load of 8760kWh.\cr
 \cr
-get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
+get_flex() currently uses a simple exponential kernel (but other choices are possible)
 
 Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
 \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr

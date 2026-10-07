@@ -14,7 +14,6 @@ runABM(
   use_parallel = T,
   ignore_social = F,
   shock = FALSE,
-  w = 0.33,
   quiet = TRUE
 )
 }
@@ -37,12 +36,10 @@ runABM(
 
 \item{shock}{if TRUE a 2030 x4 shock is included}
 
-\item{w}{(1-w) is flexibility benefit pass-through (seen by agent)}
-
 \item{quiet}{if TRUE messaging is reduced}
 }
 \value{
-a three component list - simulation output, scenario setup, meta-parameters
+a four component list - simulation output, scenario setup, meta-parameters, seeds for set_prices()
 }
 \description{
 Runs the dynamic electricity pricing adoption simulation on artificial society of ~1217 agents.

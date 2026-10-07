@@ -1,0 +1,464 @@
+---
+title: "Model description"
+subtitle: "How depmicrosimr simulates the uptake of dynamic electricity pricing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Model description}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 3.6)
+library(depmicrosimr)
+```
+
+This article describes the model **as implemented in the code**. Function names
+link to the reference pages. Parameter values quoted here are the defaults in the
+`Base` sheet of `inst/ext_data/scenario_parameters.xlsx`, available in the package as
+the dataset `sD`.
+
+## 1. What the model does
+
+*depmicrosimr* is an agent-based model (ABM) of Irish households choosing between
+electricity tariffs. It has two aims: to project how many households move from a
+**flat** tariff to a **time-of-use (ToU)** or **dynamic** tariff, and to describe the
+**load shifting** that follows, so that the consequences for the power system can be
+studied.
+
+The model combines five ingredients:
+
+| Ingredient | In one line | Main functions |
+|---|---|---|
+| Agents | About 1,200 synthetic households built from a 2024 household survey | `initialise_agents()` |
+| Prices | Simulated wholesale prices and a retail model that turns them into flat, ToU and dynamic tariffs | `sem_prices()`, `set_prices()` |
+| Load shifting | A household shifts load to cut its bill, subject to behavioural costs | `get_flex()` |
+| Decision rule | Households compare plans using prospect theory and are influenced by their neighbours | `evaluate_tariffs()`, `evaluate_full_cost()`, `get_ce_value()` |
+| Social network | A homophilous network over which tariff choices spread | `make_artificial_society()` |
+
+## 2. The simulation loop
+
+Time runs in **bi-monthly steps (six per year) from January 2019**. 2019 is before
+smart-meter rollout, so households start on a flat tariff or on the old day/night
+tariff. Dynamic pricing is introduced in mid-2026 (`dep_introduction = 2026.5`).
+
+```
+runABM(scen, Nrun, simulation_end, ...)
+ └─ for each simulation j = 1..Nrun            (parallelisable, independent)
+     ├─ prices_scen  <- set_prices(scen)                 # new price path
+     ├─ social       <- make_artificial_society(...)     # new network
+     ├─ agents_0     <- initialise_agents(...)           # new agent draw
+     └─ for t = 2..Nt                                    # one step = 2 months
+         └─ agents_t <- update_agents(agents_{t-1}, ...)
+```
+
+At each step `update_agents()`:
+
+1. builds the scenario parameters for that date (`scenario_params()`);
+2. switches households on the old day/night tariff (`tou_old`) to `tou` once
+   their smart meter has been installed (`yeartime >= rollout`);
+3. draws a random sample of households, a fraction `p.` of the population
+   (`p. = 0.03`, an inertia parameter described in the scenario sheet as estimated from CRU
+   switching data; stochastic rounding is used, see `roundr()`). Only these
+   households re-evaluate their tariff in this step;
+4. for each sampled household, evaluates the available plans and picks one
+   (section 6);
+5. recomputes each household's count of neighbours on ToU and dynamic tariffs.
+
+Each run therefore uses its own price path, its own network and its own random agent
+attributes, so variation between runs reflects all three sources of uncertainty.
+
+## 3. Agents
+
+### 3.1 Where agents come from
+
+Agents are the respondents of a 2024 household survey (Li et al., 2024), stored as
+`dep_survey`. `initialise_agents()` builds the starting state as follows.
+
+* **Annual consumption** (`kWh`) is inferred from each respondent's reported
+  highest and lowest bi-monthly electricity bills, converted to kWh with 2023 SEAI
+  prices, and fitted with a sinusoidal seasonal demand model
+  (`survey_bills_to_kwh()`, `demand_fun()`). Missing bills are imputed
+  stochastically, so `kWh` varies from run to run.
+* **Initial tariff.** Respondents who report "don't know", "other" or a day/night/peak
+  tariff are treated as `flat`. Of the respondents on a day/night tariff, two thirds
+  are assumed to be on the old day/night tariff (`tou_old`) in 2019 and the rest on
+  `flat`. Prepay customers are removed.
+* **Area and rollout.** Respondents are classed as urban or rural and linked to a
+  county, which gives an estimated smart-meter rollout date (`smart_meter_rollout`).
+* **Natural load profile.** Urban households have profile `lp1`, rural households `lp3`.
+  Households on the old day/night tariff have the measured ToU profiles `lp2`
+  (urban) and `lp4` (rural). See `load_profiles_generalised`.
+* **Latent traits.** Three traits (inertia, proactiveness, perceived flexibility)
+  come from a structural equation model of the survey (Kumar et al., 2026), stored in
+  `struct_params`.
+* **Awareness.** Each household becomes aware that dynamic tariffs exist at a time
+  drawn uniformly between 2026.5 and `dyn_aware_year` (2028.5 in the base scenario).
+  Before that date the dynamic plan is not in its choice set.
+
+### 3.2 Behavioural parameters
+
+Each household gets the following, using the traits above.
+
+* **Flexibility parameters** $(\gamma, \tau)$. The survey-derived flexibility trait
+  is standardised and mapped through a Beta distribution to a *one-hour flexibility
+  score* between zero and the largest score attainable for the chosen $(\phi, \eta)$.
+  The score is then matched to a $(\gamma,\tau)$ pair from a pre-computed table
+  (`flex_scores`, `flex_score_cube()`, `match_flex_params()`). The mapping is
+  one-to-many, so the match is randomised among the two nearest grid points. $\phi$
+  and $\eta$ are the same for all households (defaults 0.4 and 0.3).
+* **Loss aversion** $\lambda$. The inertia trait is mapped through a Beta
+  distribution to the interval from `pt_min_loss_aversion` (1.25) to
+  `pt_max_loss_aversion` (4.25).
+* **Social variables.** `degree` is the household's number of network contacts, and
+  `q_tou`, `q_dyn` are how many of them are on a ToU or dynamic tariff.
+
+The calibration target for aggregate flexibility is the difference between the
+standard flat (`lp1`) and ToU (`lp2`) load profiles (14.4%). `initialise_agents()` prints
+summary statistics of the household flexibility scores next to that target.
+
+## 4. Prices
+
+### 4.1 Wholesale prices
+
+`sem_prices()` returns hourly wholesale prices for the Single Electricity Market:
+observed prices for 2019 to 2025, then a simulation. Prices are modelled on a
+**log-like scale** that tolerates negative prices,
+
+$$
+y_t = \operatorname{arcsinh}\!\left(\frac{p_t}{s}\right), \qquad s = 0.01~\text{€/kWh},
+$$
+
+so that $p_t = s \sinh(y_t)$. The simulated series is a sum of four parts:
+
+$$
+y_t = \underbrace{\text{trend}_t}_{\text{scenario}} + \underbrace{\text{day}_t + \text{week}_t + \text{year}_t}_{\text{STL seasonality, 2019--2025}} + \underbrace{\varepsilon_t}_{\text{3-state Gaussian HMM}} .
+$$
+
+* The **trend** is anchored at the end-2025 trend and at scenario values for the
+  wholesale price at end-2030 (0.13 €/kWh) and end-2040 (0.20 €/kWh), interpolated
+  linearly on the $y$ scale. It is flat after 2040.
+* The **seasonal terms** (daily, weekly, annual) are taken from an STL decomposition
+  of the 2019–2025 data (`decompose_logprices()`, stored in `sem_logprices_2019_2025_decomp`).
+* The **noise** $\varepsilon_t$ is drawn from a pre-fitted three-state Gaussian hidden
+  Markov model of the decomposition residuals (`hmm_fit`, `generate_logprice_hmm()`,
+  `simulate_hmm()`). The states are intended to capture high-renewables, normal and
+  low-renewables regimes. Because the HMM is Gaussian on the log-like scale, price
+  variance is state-dependent.
+* An optional **price shock** (`shock = TRUE`) multiplies the trend price by four
+  from 1 January 2030, decaying with a one-year time constant.
+
+The price path does not respond to household behaviour: there is no feedback from
+aggregate load shifting to prices.
+
+### 4.2 Retail tariffs
+
+`set_prices()` turns wholesale prices into three consistent retail tariffs on an
+hourly grid, for the whole simulated period:
+
+* **Dynamic.** Wholesale price, capped, plus a time-of-day network charge, plus VAT:
+
+$$
+p^{\text{dyn}}_t = \bigl(1 + \text{VAT}_t\bigr)\Bigl[\min\bigl(\text{cap}_t,\; p^{\text{sem}}_t\bigr) + n_{b(t)}(t)\Bigr].
+$$
+
+  The cap starts at 0.5 €/kWh in 2026 (the CRU dynamic price cap) and scales with the
+  wholesale trend price. $n_b(t)$ is the network charge for the hour's ToU band
+  $b \in \{\text{night},\text{day},\text{peak}\}$, interpolated between scenario values
+  for 2020, 2026, 2030 and 2040. The ToU bands are in the package data `load_profiles_generalised`
+  (night 23:00–08:00, peak 17:00–19:00, day otherwise, adjusted for daylight saving).
+* **Flat.** A single price that follows a *trailing 365-day* load-weighted mean of the
+  dynamic price (with a 2% hedging premium), using a weighted mixture of the standard
+  flat and ToU load profiles (`lp1`, `lp2`). The flat tariff therefore lags the market.
+* **ToU.** The same trailing average, computed separately within each ToU band.
+
+The parameter `w` (default 1/3 in `set_prices()` and `runABM()`) sets how much of the
+value of flexibility suppliers retain, so that a household with no flexibility can
+be worse off on ToU or dynamic than on flat. VAT is 13.5% before 2022.4, 9% from
+2022.4, and 13.5% from 2031 (`vat_rate_fun()`). Standing charges (`standing_charge_fun()`)
+rise from €130 (2015) to €350 (2040); the dynamic plan adds a premium (€75 in the base
+scenario).
+
+Each household's bill is price times load, summed over 12 months, plus the standing charge.
+
+## 5. How a household shifts load
+
+The core of the model is `get_flex()`. Given a price series and a natural load profile
+for a household, it finds the hourly load that minimises **bill plus behavioural
+cost**.
+
+### 5.1 The optimisation problem
+
+Over a horizon of $T$ hours (one year), let $L^0_t$ be the household's natural load
+(its profile under flat prices) and $x_t$ the change from it, so that the shifted load
+is $L_t = L^0_t + x_t$. Total annual energy is $E = \sum_t L^0_t$. The household solves
+
+$$
+\min_{x}\;\; \sum_t p_t\,x_t \;+\; \frac{\tilde\eta}{2}\sum_t (x_{t+1}-x_t)^2 \;+\; \frac{\tilde\gamma}{2}\sum_t \Bigl(\sum_k g(k-t)\,x_k\Bigr)^{2}
+$$
+
+subject to
+
+$$
+\sum_t x_t = 0, \qquad -(1-\phi_t)\,L^0_t \;\le\; x_t \;\le\; P_{\max} - L^0_t .
+$$
+
+In words:
+
+* **Bill term** $\sum_t p_t x_t$. Moving load to cheap hours lowers the bill.
+* **Ramping term** (parameter $\eta$). Penalises abrupt hour-to-hour changes in the shift,
+  which keeps the shifted profile smooth and stops the household reacting to tiny
+  price differences.
+* **Stiffness term** (parameter $\gamma$, timescale $\tau$). The kernel $g$ decays on a
+  timescale $\tau$ hours, so $\sum_k g(k-t)x_k$ is a local average of the shift. A load
+  that is moved *and then returned within about $\tau$ hours* nets out and costs little;
+  load moved for much longer than $\tau$ is penalised heavily. Households with large
+  $\tau$ and small $\gamma$ are more flexible.
+* **Energy neutrality** $\sum_t x_t = 0$. The household changes *when* it uses
+  electricity, not *how much*. The constraint holds over the whole horizon, with
+  the stiffness term discouraging long-range shifts.
+* **Bounds.** The household cannot shift more than its flexible load
+  $(1-\phi_t)L^0_t$ and cannot exceed its maximum import capacity $P_{\max}$
+  (`mic = 12` in the base scenario).
+
+The scaled coefficients are $\tilde\eta = \eta\cdot 8760/E$ and
+$\tilde\gamma = \gamma\,(8760/E)/\lVert g\rVert^2$, so that $\gamma$ and $\eta$ are
+expressed for a household with a standard 8,760 kWh annual load. The kernel is
+exponential by default, $g(\ell) = e^{-|\ell|/\tau}$, with Gaussian, Cauchy and Matérn
+alternatives selectable through the `kernel` argument. The problem is a sparse convex
+quadratic programme solved with OSQP (Stellato et al., 2020).
+
+### 5.2 Inflexible load
+
+A fraction $\phi$ of load is inflexible. It varies through the day with a factor $f_h$
+(`diurnal_inflex`, estimated from the lowest quantile of smart-meter profiles of
+households without solar PV, normalised to a mean of one). The inflexible share in hour
+$t$ is
+
+$$
+\phi_t = \phi - (1-\phi)\ln(1-\phi)\,(f_{h(t)} - 1),
+$$
+
+which averages to $\phi$ and tends to one as $\phi \to 1$ whatever $f$ is.
+
+### 5.3 Kernels and the shape of the penalty
+
+```{r kernels, echo = FALSE}
+tau <- 24
+lag <- 0:96
+plot(lag, exp(-lag / tau), type = "l", lwd = 2, xlab = "lag (hours)", ylab = "g(lag)",
+     main = expression(paste("Exponential kernel, ", tau, " = 24 h")), ylim = c(0, 1))
+lines(lag, exp(-(lag / (1.128 * tau))^2), lty = 2, lwd = 2)
+lines(lag, 1 / (1 + (lag / (0.6366 * tau))^2), lty = 3, lwd = 2)
+legend("topright", legend = c("exp (default)", "gauss", "cauchy"), lty = 1:3, lwd = 2, bty = "n")
+```
+
+### 5.4 Flexibility score
+
+The package summarises how much a household shifts using a **flexibility score**, the
+share of annual energy that is moved:
+
+$$
+\text{flex} = 100 \times \frac{\tfrac12 \sum_t |x_t|}{E} \;\%.
+$$
+
+`get_flex_scores()` computes it at one-hour resolution and for coarser windows, and the
+precomputed table `flex_scores` links $(\phi,\eta,\gamma,\tau)$ to scores.
+
+### 5.5 Behavioural cost
+
+When the household's decision depends on the behavioural cost (behavioural model
+`"full"`, section 7), the cost of the flexible plan is the optimised bill plus the two
+penalty terms evaluated at the optimum:
+
+$$
+\text{cost}^{\text{flex}} = \sum_t p_t L_t + \text{standing charge}
+ + \tfrac12\tilde\gamma \lVert Kx\rVert^2 + \tfrac12\tilde\eta \sum_t (x_{t+1}-x_t)^2 ,
+$$
+
+computed in `get_full_annual_cost()`.
+
+## 6. Choosing a tariff
+
+### 6.1 Which plans are available
+
+* `flat`: always.
+* `tou`: once the household's smart meter is installed (`yeartime >= rollout`).
+* `dynamic`: once the household is aware of it (`yeartime >= dyn_aware`).
+
+Households evaluate each plan on the **simulated hourly prices for the twelve months
+starting at the decision date**. In effect they have perfect foresight over a one-year
+horizon.
+
+### 6.2 Costs under each plan
+
+For ToU and dynamic plans the household computes two annual costs, relative to its flat bill
+$B^{\text{flat}}$:
+
+* $B^{\text{flex}}$, achieved if it **does** manage to shift load optimally, and
+* $B^{\text{noflex}}$, if it **does not** shift and simply pays the new prices for its natural load.
+
+The savings are $s^{\text{flex}} = B^{\text{flat}} - B^{\text{flex}}$ and
+$s^{\text{noflex}} = B^{\text{flat}} - B^{\text{noflex}}$. The second can be a loss.
+
+### 6.3 Prospect theory
+
+Switching is treated as a risky prospect with two outcomes. The household succeeds in
+shifting with probability $c$ (its *confidence*) and fails with probability $1-c$.
+Outcomes are valued with the Tversky–Kahneman (1992) value function and probabilities
+are distorted by a weighting function:
+
+$$
+v(s) = \begin{cases} s^{\alpha} & s \ge 0 \\ -\lambda\,(-s)^{\beta} & s < 0 \end{cases},
+\qquad
+w(c;\delta) = \frac{c^{\delta}}{\bigl(c^{\delta} + (1-c)^{\delta}\bigr)^{1/\delta}} .
+$$
+
+The prospect value and its euro-denominated **certainty equivalent** are
+
+$$
+\text{PV} = w(c;\delta^{+})\,v(s^{\text{flex}}) + w(1-c;\delta^{-})\,v(s^{\text{noflex}}),
+\qquad
+\text{CE} = \begin{cases} \text{PV}^{1/\alpha} & \text{PV}\ge 0 \\ -\bigl(-\text{PV}/\lambda\bigr)^{1/\beta} & \text{PV}<0 \end{cases}
+$$
+
+with $\alpha=\beta=0.88$, $\delta^{+}=0.61$ (used for the "flexibility achieved"
+outcome) and $\delta^{-}=0.69$ (used for the "not achieved" outcome). These come from
+`sD`. The loss-aversion coefficient $\lambda$ is **agent-specific** (section 3.2); the
+value 2.25 in `sD` is only the default for stand-alone calls to `get_ce_value()`.
+
+```{r pt-curves, echo = FALSE, fig.width = 8, fig.height = 3.4}
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+alpha <- 0.88; beta <- 0.88
+v <- function(s, lambda) ifelse(s >= 0, abs(s)^alpha, -lambda * abs(s)^beta)
+s <- seq(-100, 100, length.out = 401)
+plot(s, v(s, 2.25), type = "l", lwd = 2, xlab = "saving vs flat tariff (EUR)", ylab = "value v(s)",
+     main = "Value function")
+lines(s, v(s, 1.25), lty = 2, lwd = 2); lines(s, v(s, 4.25), lty = 3, lwd = 2)
+abline(h = 0, v = 0, col = "grey70")
+legend("topleft", legend = c(expression(lambda == 2.25), expression(lambda == 1.25),
+                             expression(lambda == 4.25)), lty = c(1, 2, 3), lwd = 2, bty = "n")
+wf <- function(p, d) p^d / (p^d + (1 - p)^d)^(1 / d)
+p <- seq(0, 1, length.out = 201)
+plot(p, wf(p, 0.61), type = "l", lwd = 2, xlab = "probability", ylab = "weight w(p)",
+     main = "Probability weighting")
+lines(p, wf(p, 0.69), lty = 2, lwd = 2); abline(0, 1, col = "grey70")
+legend("topleft", legend = c(expression(delta == 0.61), expression(delta == 0.69)),
+       lty = 1:2, lwd = 2, bty = "n")
+par(op)
+```
+
+### 6.4 Confidence and social influence
+
+The confidence $c$ that a household will manage to shift load is not fixed. It rises
+with the share of the household's network contacts who have already adopted:
+
+$$
+c^{\text{tou}} = c_{\text{tou}} + \min\!\Bigl(1, \tfrac{q_{\text{tou}}+q_{\text{dyn}}}{\text{degree}}\Bigr)\,(c_{\text{tou}}^{\max}-c_{\text{tou}}),
+$$
+
+$$
+c^{\text{dyn}} = c_{\text{dyn}} + \min\!\Bigl(1, \tfrac{q_{\text{dyn}}}{\text{degree}}\Bigr)\,(c_{\text{tou}}-c_{\text{dyn}}),
+$$
+
+with base-scenario values $c_{\text{tou}} = 0.70$, $c^{\max}_{\text{tou}} = 0.85$ and
+$c_{\text{dyn}} = 0.50$. A household whose neighbours all use ToU or dynamic tariffs is
+therefore as confident about ToU as 0.85, and one whose neighbours all use dynamic
+tariffs is as confident about dynamic as it would be about ToU without any social
+reinforcement (0.70). Households with no contacts feel no social effect.
+
+### 6.5 Decision rule
+
+The household computes $\text{CE}^{\text{tou}}$ and $\text{CE}^{\text{dyn}}$ for the plans
+open to it. It adopts the plan with the larger certainty equivalent **if that is
+positive**; otherwise it chooses `flat`. A sampled household can therefore also move
+*back* to flat.
+
+## 7. Behavioural model variants
+
+The `behavioural_model` argument of `runABM()` and `update_agents()` selects how costs
+enter the decision:
+
+| Value | Flexible-plan cost | Status |
+|---|---|---|
+| `"prospect"` | Optimised bill only (`evaluate_tariffs()`) | Current |
+| `"full"` | Optimised bill **plus** the $\gamma$ and $\eta$ behavioural penalties (`evaluate_full_cost()`) | Current; the default in `runABM()` |
+| `"classic"` | Cheapest-plan rule with a social term and a threshold $\theta$ | Legacy |
+
+## 8. Social network
+
+`make_artificial_society()` builds a random **homophilous** network over the agents
+(Gower distance on the demographic variables in `dep_society_1`, weighted by `homophily`).
+The probability that two agents are linked falls with their social distance $d_{ij}$:
+
+$$
+P(i \sim j) \propto (1-d_{ij})^{\nu}, \qquad \nu = 4.5,
+$$
+
+rescaled so that each agent's expected number of contacts approximately matches the
+degree reported in the survey. Agents who reported no social contacts stay isolated. The network is
+**static** within a run. `get_network_characteristics()` tabulates its assortativity
+by demographic variable.
+
+## 9. Scenarios
+
+The scenario workbook has one sheet per scenario. `sD` is the `Base` sheet.
+
+```{r sD-table, echo = FALSE}
+knitr::kable(sD[, c("category", "parameter", "value", "unit")], digits = 5,
+             caption = "Parameters in the base scenario `sD`.")
+```
+
+The other sheets in the workbook are variations on the base. According to the workbook's
+`Description` sheet, `EDSC` and `LDSC` vary the dynamic standing-charge premium,
+`LowPrice` and `HighPrice` change the wholesale price path for 2030 and 2040, and
+`NoToU` and `Battery` are further intended variants. Check the sheet values against the
+descriptions before relying on a scenario; the workbook is
+`inst/ext_data/scenario_parameters.xlsx` in the repository.
+
+## 10. Outputs
+
+`runABM()` returns a list of three elements.
+
+* `abm`: a data frame with one row per agent, per time step and per simulation. It holds the
+  household's state at that date: `serial`, `kWh`, `tariff_plan`, `rollout`, `area`,
+  `phi`, `eta`, `gamma`, `tau`, `lambda`, `flex_score`, `natural_profile`, `profile`, `annual_bill`,
+  `degree`, `q_tou`, `q_dyn`, `dyn_aware`, the confidences `c_tou_soc` and `c_det_soc`,
+  the certainty equivalents `CE_tou` and `CE_det` where computed, `simulation`, and `date`.
+  The exact set of columns depends on the behavioural model.
+* `scenario`: the scenario table that was used.
+* `system`: the run settings (number of runs, end year, inertia `p.`, behavioural model,
+  shock, `w`, and the confidence parameters).
+
+Adoption curves are obtained by counting `tariff_plan` by `date`. See
+`vignette("getting-started")`.
+
+## 11. Assumptions and limitations
+
+These follow directly from the code and are worth keeping in mind when interpreting results.
+
+* **Household flexibility is a modelling construct.** $(\gamma,\tau)$ are matched to stated
+  survey flexibility, not estimated from observed load-shifting behaviour. Many parameter pairs
+  give similar flexibility scores.
+* **One-year perfect foresight.** Households see the simulated price path of the next
+  twelve months when they decide.
+* **Annual energy neutrality.** Load can in principle move across months, discouraged only
+  by the stiffness penalty.
+* **Two standard profiles.** Households follow an urban (`lp1`) or rural (`lp3`) natural
+  profile scaled by their annual consumption. There is no explicit representation of solar PV,
+  batteries, electric vehicles or heat pumps in the code.
+* **Exogenous prices.** Wholesale prices are not affected by adoption.
+* **Static network.** Links do not form or break.
+* **Random inertia.** A household reconsiders its tariff on average once every
+  $1/p. \approx 33$ steps, about five and a half years.
+* **Results are unweighted.** `initialise_agents()` does not use the survey weights
+  (`dep_survey$weights`).
+
+## References
+
+* Li et al. (2024). Household survey on dynamic electricity pricing in Ireland. *[full reference to be added]*
+* Kumar et al. (2026). Structural equation model of attitudes to dynamic pricing. *[full reference to be added]*
+* Stellato, B., Banjac, G., Goulart, P., Bemporad, A. and Boyd, S. (2020). OSQP: an operator
+  splitting solver for quadratic programs. *Mathematical Programming Computation* 12(4), 637–672.
+* Tversky, A. and Kahneman, D. (1992). Advances in prospect theory: cumulative representation
+  of uncertainty. *Journal of Risk and Uncertainty* 5, 297–323.

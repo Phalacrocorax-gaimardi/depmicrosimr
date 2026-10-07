@@ -34,7 +34,7 @@
 #' \cr
 #' The cost parameters  are defined for a standard annual load of 8760kWh.\cr
 #' \cr
-#' get_flex() currently uses a Matern 5/2 kernel, which can be regarded as the limit of a large number of devices with distinct gaussian flexibility cost penalties.
+#' get_flex() currently uses a simple exponential kernel (but other choices are possible)
 #'
 #' Three additional constraints are imposed (1) \eqn{\sum(x_t)=0} is i.e. total household energy consumption is inelastic (2) the maximum import capacity MIC cannot be exceeded
 #' \eqn{L^0_t + \sum(x_t) <= MIC} (iii) consumption load cannot be negative \eqn{L^0_t + \sum(x_t) >= 0}.\cr
@@ -51,11 +51,12 @@
 #' @param gamma unscaled quandatric cost penalty weight
 #' @param eta unscaled weight of the kinetic term (regularisation)
 #' @param tau flexibility time horizon in hours
-#' @param kernel choice of "matern", "exponential", "cauchy","gauss" (both have single lifetime tau)
+#' @param kernel choice of "matern", "exp", "cauchy","gauss" (both have single lifetime tau)
 #' @param precision desired solver precision
 #'
 #'
-#' @returns a 2-column dataframe of datetime and perturbed load
+#' @returns a 7-column dataframe of datetime, price, unperturbed load, flexible share of unperturbed load,
+#' load-shift x, optimised load, and inflexible load
 #' @export
 #'
 #' @examples
@@ -73,7 +74,6 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
   #print()
   #maximum import capacity
   stopifnot(kernel %in% c("exp","gauss","cauchy","matern"))
-
   #fully inflexible case os pathological for osqp
   # Pre-validate phi
   stopifnot(length(phi) == 1, !is.na(phi))
@@ -128,11 +128,6 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
   parameter_scaling <- (8760/sum(demand$load))
   eta_scaled <- eta * parameter_scaling
   gamma_scaled <- gamma / frob_sq * parameter_scaling
-
-  #print(paste("gamma normalisation",frob_sq))
-  # L1 Scaling (integrates to 1)
-  #kernel_sum <- sum(kernel_values) + sum(kernel_values[-1])
-  #gamma_scaled <- gamma / (kernel_sum)^2
 
   #gamma_scaled <- gamma/tau
   # kernel matrix P_kern
@@ -454,120 +449,6 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 
 }
 
-
-#' set_prices_old
-#'
-#' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
-#' this simple model is to have a consistent set of flat, day/night/peak and dynamic prices in future projections and also to reproduce historic
-#' prices with reasonable accuracy. The \code{tariff_plan} are supposed to be broadly reflective of the market, rather than to mimic one particular
-#' supplier. Without this sub-model, with ad-hoc assumptions for future tariff plan pricing, the ABM projections might not be meaningful because they would depend
-#' on specific assumptions.\cr
-#' \cr
-#' This is equivalent to the assumption that network supplier set their prices so that the average price paid by
-#' customers on flat, ToU and dynamic prices are related across standard profiles.The parameter \code{w} represents the fraction of gain
-#' from flexibility that is passed on to consumers. If the gain is passed on in full, then \eqn{p_{flat}=p_{tou}} where the weighted mean prices are calculated
-#' in the inflexible LP1 profile. In general however, \eqn{p_{flat} < p_{tou}} for inflexible customers, and therefore there is a potential
-#' cost from adopting variable pricing tariffs. For inflexible customers, \code{set_prices()} gives \eqn{p_{tou}\approx p_{dynamic} > p_{flat}}
-#'
-#' \cr
-#' \cr
-#' Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
-#' \code{peak_network_charge_fun(scen,yeartime)} etc. These are supposed to include supplier uplift, and other systems charges on top of the regulated network TUoS and DUos network charge. The model assumes that
-#' wholesale prices + VAT are passed through.\cr
-#' \cr
-#' set_prices() is meant to to run at the beginning of each ABM run.\cr
-#' \cr
-#' Optionally, the CRU wholesale price cap (currently 0.5euro/kWh) can be turned off.
-#'
-#' Flat and ToU tariffs can be set retrospectively or based on forecast prices. Probably, retrospective price setting is best.
-#'
-#' @param scen scenario
-#' @param end_year last full year for simulation
-#' @param cru_cap Boolean, defaults to TRUE
-#' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
-#' @param shock if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030
-#'
-#' @returns
-#' @export
-#'
-#' @examples
-#' #set_prices_old(sD)
-set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
-  #
-  midyear <- function(year,tou_band) {
-    #a function to identify the decimal date "mid_year" for day/night/peak hours
-    dplyr::case_when(tou_band=="night"~lubridate::decimal_date(lubridate::ymd_hms(paste(year,"-07-02 00:00:00",sep=""))),
-                                                     tou_band=="day"~lubridate::decimal_date(lubridate::ymd_hms(paste(year,"-07-02 08:00:00",sep=""))),
-                                                     tou_band=="peak"~lubridate::decimal_date(lubridate::ymd_hms(paste(year,"-07-01 17:00:00",sep="")))
-  )}
-  #sem prices
-  #prices <- get_price_load_scen(scen) %>% dplyr::select(-tou)
-  wholesale <-  sem_prices(scen,end_year,shock=shock)
-  prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
-
-  #prices <- prices %>% dplyr::mutate(hour=lubridate::hour(datetime)) %>% dplyr::inner_join(tou_tariffs %>% dplyr::rename("hour"=start),by="hour") %>% dplyr::rename("sem"=price)
-
-  prices <- prices %>% dplyr::mutate(y=lubridate::decimal_date(datetime),network_price=dplyr::case_when(tou_band=="night"~night_network_charge_fun(scen,y),
-                                                      tou_band=="day"~day_network_charge_fun(scen,y),
-                                                      tou_band=="peak"~peak_network_charge_fun(scen,y)))
-  #assume price cap scales with trend sem price
-  if(cru_cap) {
-    prices <- prices %>% dplyr::mutate(dynamic_cap=0.5*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
-    prices <- prices %>% dplyr::mutate(price=pmin(dynamic_cap,sem_price)+network_price) #%>% dplyr::select(-dynamic_cap)
-  } else{
-    prices <- prices %>% dplyr::mutate(price=sem_price+network_price)
-  }
-
-  #dynamic prices
-  dyn_prices <- prices %>% dplyr::select(datetime,tou_band,price) %>% dplyr::mutate(tariff_plan="dynamic")
-  dyn_prices <- dyn_prices %>% dplyr::inner_join(load_profiles_generalised)
-  #################################
-  # a somewhat speculative guess about how network suppliers arrive at their flat tariff (commodity swap price)
-  # mean flat prices paid by year
-  #################################
-  #flat_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price),dynamic_lp2=sum(lp2*price),
-  #                                                                     dynamic_lp3=sum(lp3*price),dynamic_lp4=sum(lp4*price))
-  flat_prices <- dyn_prices %>% dplyr::group_by(year=lubridate::year(datetime)) %>% dplyr::summarise(price=(1-w)*sum(lp1*price)+w*sum(lp2*price))
-
-  #average over load profiles
-  #flat_prices <- flat_prices %>% tidyr::pivot_longer(-year,names_to="profile",values_to="price")
-  flat_prices <- flat_prices %>% dplyr::group_by(year) %>% dplyr::summarise(price=mean(price))
-  flat_prices <- flat_prices %>% dplyr::inner_join(tidyr::expand_grid(year=flat_prices$year,tou_band=c("day","night","peak")),by="year")
-  flat_prices <- flat_prices %>% dplyr::mutate(yeartime=midyear(year,tou_band)) %>% dplyr::ungroup() %>% dplyr::select(-year)
-  flat_prices <- flat_prices %>% dplyr::mutate(tariff_plan="flat")
-  #flat_prices <- flat_prices %>% dplyr::mutate(price=price*(1+risk_premium_flat)+margin)
-  #tou prices
-  #tou_prices <- prices %>% dplyr::group_by(year=lubridate::year(datetime),tou_band) %>% dplyr::summarise(dynamic_lp1=sum(lp1*price)/sum(lp1),dynamic_lp2=sum(lp2*price)/sum(lp2),
-  #                                                                            dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
-  #
-  tou_prices <- dyn_prices %>% dplyr::group_by(year=lubridate::year(datetime),tou_band) %>% dplyr::summarise(price=w*sum(lp1*price)/sum(lp1)+(1-w)*sum(lp2*price)/sum(lp2))
-                                                                                                         #                                                                            dynamic_lp3=sum(lp3*price)/sum(lp3),dynamic_lp4=sum(lp4*price)/sum(lp4))
-  #tou_prices <- tou_prices %>% tidyr::pivot_longer(c(-year,-tou_band),names_to="profile",values_to="price")
-  tou_prices <- tou_prices %>% dplyr::group_by(year,tou_band) %>% dplyr::summarise(price=mean(price)) %>% dplyr::ungroup()
-  #key yeartimes (taking July 2 as middle day)
-
-  tou_prices <- tou_prices %>% dplyr::mutate(yeartime=midyear(year,tou_band)) %>% dplyr::ungroup() %>% dplyr::select(-year)
-  tou_prices <- tou_prices %>% dplyr::mutate(tariff_plan="tou")
-  #tou_prices <- tou_prices %>% dplyr::mutate(price=price*(1+risk_premium_tou)+margin)
-
-  ts <- prices %>% dplyr::select(datetime,tou_band) %>% dplyr::mutate(yeartime=lubridate::decimal_date(datetime))
-  #
-  flat_prices <- ts %>% dplyr::left_join(flat_prices,by=c("yeartime","tou_band")) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
-  flat_prices$tariff_plan <- "flat"
-  flat_prices <- flat_prices %>% dplyr::select(-yeartime)
-  #
-  #ts <- prices %>% select(datetime,tariff) %>% mutate(yeartime=decimal_date(datetime))
-  tou_prices <- ts %>% dplyr::left_join(tou_prices,by=c("tou_band","yeartime")) %>% dplyr::arrange(tou_band,yeartime) %>% dplyr::group_by(tou_band) %>% dplyr::mutate(price = zoo::na.approx(price, rule = 2))
-  tou_prices$tariff_plan <- "tou"
-  tou_prices <- tou_prices %>% dplyr::select(-yeartime)
-  dyn_prices <- dyn_prices %>% dplyr::select(datetime,tou_band,price,tariff_plan) #%>% dplyr::mutate(price=price+margin)
-  result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) %>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
-  #apply VAT to all prices
-  result <- result %>% dplyr::inner_join(ts %>% dplyr::select(-tou_band),by="datetime") %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state))
-  result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,yeartime))*price) %>% dplyr::select(-tou_band,-yeartime)
-}
-
-
 #' set_prices
 #'
 #' \code{set_prices()} is a *retail* electricity tariff pricing model based on wholesale prices and network charges, and retail supplier pricing assumptions. The purpose of
@@ -597,16 +478,17 @@ set_prices_old <- function(scen,end_year=2040,cru_cap=TRUE,w=0.5,shock=FALSE){
 #' @param scen scenario
 #' @param end_year last full year for price simulation, set to 2045 by default
 #' @param cru_cap Boolean, defaults to TRUE
-#' @param w fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
 #' @param shock if TRUE then a 4x price shock with time constant of one year is added on Jan 1 2030
 #'
-#' @returns
+#' @returns a eight-column dataframe of load_profiles,price, tariff_plan and HMM state
 #' @export
 #'
 #' @examples
 #' set_prices(sD)
-set_prices <- function(scen,end_year=2045,cru_cap=TRUE,w=0.33,shock=FALSE){
+set_prices <- function(scen,end_year=2045,cru_cap=TRUE,shock=FALSE){
   #
+  #fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
+  w <- scen %>% dplyr::filter(parameter=="w.") %>% dplyr::pull(value)
   wholesale <-  sem_prices(scen,end_year,shock=shock)
   prices <- wholesale %>% dplyr::inner_join(load_profiles_generalised,by="datetime")
   #
@@ -615,7 +497,8 @@ set_prices <- function(scen,end_year=2045,cru_cap=TRUE,w=0.33,shock=FALSE){
                                                                                                         tou_band=="peak"~peak_network_charge_fun(scen,y)))
   #assume price cap scales with trend sem price
   if(cru_cap) {
-    prices <- prices %>% dplyr::mutate(dynamic_cap=0.5*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
+    cap_2026 <- scen %>% dplyr::filter(parameter=="dynamic_cap_2026") %>% dplyr::pull(value)
+    prices <- prices %>% dplyr::mutate(dynamic_cap=cap_2026*sem_trend_price(scen, lubridate::decimal_date(datetime))/sem_trend_price(scen,2026.5))
     prices <- prices %>% dplyr::mutate(price=pmin(dynamic_cap,sem_price)+network_price) #%>% dplyr::select(-dynamic_cap)
   } else{
     prices <- prices %>% dplyr::mutate(price=sem_price+network_price)
@@ -678,7 +561,9 @@ tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
 #'
 #' Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
 #' peak_network_charge_fun(scen,yeartime) etc. There is a supplier uplift on top of the regulated network charge. The model assumes that
-#' wholesale prices + VAT are passed through.
+#' wholesale prices + VAT are passed through.\cr
+#' \cr
+#' Not called by set_prices() so this function is for info only.
 #'
 #'
 #' @param scen scenario
@@ -765,107 +650,6 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_
   }
   df <- df %>% dplyr::rename("annual_bill"=annual_bill_flexible)
   return(df %>% dplyr::arrange(annual_bill))
-}
-
-
-
-#' get_prospect_costs
-#'
-#' Computes everything a prospect-theory certainty-equivalent calculation needs for one household:
-#' the flat-tariff annual cost, and the tou/dynamic annual costs both with and without the household's
-#' optimal load-shifting response \emph{plus} the underlying hourly load profiles themselves (original,
-#' tou-optimized, dynamic-optimized), not just the annual totals.
-#'
-#' Unlike \code{tariff_plan_bills()} or \code{get_annual_cost()}, this does not discard \code{get_flex()}
-#' hourly output after summing it \code{get_flex()} is run once per available plan (\code{tou},
-#' \code{dynamic}), and both the annual total \code{and} the hourly profile it produced are kept.
-#'
-#' Plan availability at \code{yeartime} follows the same rule as \code{tariff_plan_bills()}: only
-#' \code{flat} before the household's smart meter rollout, \code{flat}+\code{tou} once rolled out but
-#' before dynamic pricing is introduced (2026.5), and all three plans after. Costs for plans that aren't
-#' yet available are \code{NA}; their profiles are simply absent from the returned list.
-#'
-#' @param kWh annual householdload
-#' @param phi \eqn{\phi}
-#' @param gamma \eqn{\gamma}
-#' @param eta \eqn{\eta}
-#' @param tau \eqn{\tau}
-#' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
-#' @param yeartime current decimal time
-#' @param smart_rollout smart meter rollout time
-#' @param prices_scen price scenario
-#'
-#' @returns a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,
-#'   det_noflex, det_flex) and \code{profiles} (a named list of hourly \code{(datetime, price, load,
-#'   load_opt, ...)} tibbles, one per available plan \code{flat} has no \code{load_opt} since
-#'   there's no shifting incentive on a flat tariff)
-#' @export
-#'
-#' @examples
-#' # sample values for standalone development/testing in the real ABM these come from a
-#' # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
-#' prices_scen <- set_prices(sD)
-#' params <- scenario_params(sD,2034)
-#' result <- get_prospect_costs(kWh = 8760, phi = 0.25, gamma = 1, eta = 0.2, tau = 48,natural_profile = "LP1", yeartime = 2030, smart_rollout = 2020,prices_scen = prices_scen)
-#' result$costs
-#' result$profiles$tou
-get_prospect_costs <- function(kWh, phi, gamma, eta, tau, natural_profile = "LP1", yeartime, smart_rollout, prices_scen) {
-
-  stopifnot(tolower(natural_profile) %in% c("lp1", "lp3"))
-  profile <- tolower(natural_profile)
-  yeartime <- params$yeartime
-  #standing_charge <- params[[paste0("standing_charge_", tariff_plan)]]
-  plans <- if (yeartime >= 2026.5) {
-    c("flat", "tou", "dynamic")
-  } else if (yeartime < smart_rollout) {
-    c("flat")
-  } else {
-    c("flat", "tou")
-  }
-
-  start_time <- lubridate::date_decimal(yeartime)
-  end_time   <- lubridate::date_decimal(yeartime + 1)
-
-  # one household's (datetime, price, load) for one plan's prices, one year —
-  # the exact shape get_flex() needs
-  get_plan_demand <- function(plan) {
-    prices_scen |>
-      dplyr::filter(tariff_plan == plan) |>
-      dplyr::inner_join(load_profiles_generalised |> dplyr::select(datetime, dplyr::all_of(profile)),
-                        by = c("datetime", profile)) |>
-      dplyr::filter(datetime >= start_time, datetime <= end_time) |>
-      dplyr::mutate(load = .data[[profile]] * kWh) |>
-      dplyr::select(datetime, price, load) |>
-      dplyr::arrange(datetime)
-  }
-
-  profiles <- list()
-
-  flat_demand <- get_plan_demand("flat")
-  profiles$flat <- flat_demand
-  flat_cost <- sum(flat_demand$price * flat_demand$load)
-
-  costs <- list(flat = flat_cost, tou_noflex = NA_real_, tou_flex = NA_real_,
-                det_noflex = NA_real_, det_flex = NA_real_)
-
-  if ("tou" %in% plans) {
-    tou_profile <- get_flex(get_plan_demand("tou"), phi, gamma, eta, tau)
-    profiles$tou <- tou_profile
-    costs$tou_noflex <- sum(tou_profile$price * tou_profile$load)
-    costs$tou_flex   <- sum(tou_profile$price * tou_profile$load_opt)
-  }
-
-  if ("dynamic" %in% plans) {
-    det_profile <- get_flex(get_plan_demand("dynamic"), phi, gamma, eta, tau)
-    profiles$dynamic <- det_profile
-    costs$det_noflex <- sum(det_profile$price * det_profile$load)
-    costs$det_flex   <- sum(det_profile$price * det_profile$load_opt)
-  }
-
-  list(
-    costs = tibble::as_tibble(costs),
-    profiles = profiles
-  )
 }
 
 
@@ -999,12 +783,11 @@ get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_pro
 #' @export
 #'
 #' @examples
-#' #prices_scen <- set_prices(sD)
-#' #params <- scenario_params(sD,2032)
+#' prices_scen <- set_prices(sD)
+#' params <- scenario_params(sD,2032)
 #' #costs <- get_prospect_costs_light(sD,8760, 0.4, 5, 0.3, 48, "LP1", 2025, prices_scen,params)
 #' #get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.8,0.7,2.25)
 get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,flex_certainty_tou=0.8,flex_certainty_det=0.7,lambda=2.25) {
-
   # --- load in the prospect-theory parameters (same lookup pattern as every other
   #     scenario-driven function in the package) ---
   alpha               <- scen |> dplyr::filter(parameter == "pt_alpha") |> dplyr::pull(value)
@@ -1136,7 +919,7 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' \code{flat}. This is the self-contained unit meant to be called once per household from
 #' \code{update_agents()} in place of the classic savings/social/theta decision.
 #'
-#' Note that \code{evaluate_full_cost()} assumes that agent awareness of of dynamic pricing beings at 2026.5 and is complete in 2030. Between
+#' Note that \code{evaluate_full_cost()} assumes that agent awareness of of dynamic pricing beings at 2026.5 and is complete at \code{dyn_aware_year}. Between
 #' those times awareness is random.
 #'
 #' @param scen scenario dataframe

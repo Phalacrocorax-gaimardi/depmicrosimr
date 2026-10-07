@@ -1,0 +1,144 @@
+---
+title: "Getting started"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+# The examples below simulate prices and solve many optimisation problems, so they are
+# slow. They are shown but not run when the site is built. To run them yourself, set
+#   Sys.setenv(DEPMICROSIMR_RUN_VIGNETTES = "true")
+# before building, or copy the code into an R session.
+run_heavy <- identical(Sys.getenv("DEPMICROSIMR_RUN_VIGNETTES"), "true")
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = run_heavy,
+                      fig.width = 7, fig.height = 3.2)
+```
+
+This article shows the three things most users do first: simulate a price scenario,
+see how one household responds to it, and run the full agent-based model. For how
+the model works, see `vignette("model-description")`.
+
+## Installation
+
+```{r install, eval = FALSE}
+# install.packages("remotes")
+remotes::install_github("phalacrocorax-gaimardi/depmicrosimr")
+```
+
+Load the package. Its scenario table `sD` is the base scenario used throughout.
+
+```{r load, eval = TRUE}
+library(depmicrosimr)
+head(sD[, c("parameter", "value", "unit")])
+```
+
+## 1. Simulate retail prices
+
+`set_prices()` simulates one wholesale price path from 2026 onwards (observed prices
+before that) and turns it into hourly **flat**, **ToU** and **dynamic** tariffs.
+It draws random numbers, so every call gives a different path.
+
+```{r prices}
+set.seed(1)
+prices_scen <- set_prices(sD)
+head(prices_scen)
+```
+
+## 2. How one household responds
+
+`get_flex()` takes a table with columns `datetime`, `price` and `load` (the household's
+natural load, in kWh per hour) and returns the optimal shifted load `load_opt`.
+The parameters are the inflexible fraction `phi`, the behavioural cost weights `gamma` and `eta`, and the load-shift timescale
+`tau` in hours.
+
+```{r get-flex}
+library(dplyr)
+
+demand <- prices_scen %>%
+  filter(tariff_plan == "dynamic", lubridate::year(datetime) == 2026) %>%
+  inner_join(load_profiles_generalised %>% select(datetime, lp1)) %>%
+  mutate(load = 4200 * lp1) %>%          # a household using 4,200 kWh a year
+  select(datetime, price, load)
+
+response <- get_flex(demand, phi = 0.4, gamma = 5, eta = 0.3, tau = 24)
+
+# share of annual energy that was moved to another hour
+100 * sum(abs(response$load_opt - response$load)) / (2 * sum(response$load))
+```
+
+Plot one winter week of natural against shifted load:
+
+```{r plot-flex}
+library(ggplot2)
+week <- response %>% filter(lubridate::yday(datetime) %in% 32:38)
+
+ggplot(week, aes(datetime)) +
+  geom_line(aes(y = load, colour = "natural")) +
+  geom_line(aes(y = load_opt, colour = "shifted")) +
+  scale_colour_manual(values = c(natural = "grey50", shifted = "orange")) +
+  labs(x = NULL, y = "kWh per hour", colour = NULL)
+```
+
+Larger `gamma` makes shifting costlier, so load moves less. Larger `tau` lets the
+household move load further in time before it is penalised. Increasing `phi` makes more
+of the load inflexible.
+
+## 3. Run the agent-based model
+
+`runABM()` runs one or more independent simulations. Each builds its own price path,
+social network and agent population, then steps forward in two-month intervals from
+January 2019. Dynamic tariffs are introduced in mid-2026, so the run has to extend past
+that date to see any dynamic adoption.
+
+```{r run-abm}
+set.seed(42)
+res <- runABM(
+  sD,
+  Nrun            = 2,
+  simulation_end  = 2030,
+  behavioural_model = "prospect",   # "full" also counts the behavioural penalties
+  use_parallel    = FALSE           # TRUE uses several cores (macOS/Linux/Windows)
+)
+
+names(res)          # "abm" "scenario" "system"
+dim(res$abm)
+```
+
+Start with `Nrun = 1` and a short horizon: every sampled household solves several
+optimisation problems at each step.
+
+`res$abm` has one row per household, per date and per simulation. To see adoption over
+time, count households by tariff plan:
+
+```{r adoption}
+adoption <- res$abm %>%
+  count(simulation, date, tariff_plan) %>%
+  group_by(simulation, date) %>%
+  mutate(share = n / sum(n)) %>%
+  ungroup()
+
+ggplot(adoption, aes(date, share, colour = tariff_plan, linetype = factor(simulation))) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = NULL, y = "share of households", colour = "tariff plan", linetype = "run")
+```
+
+Before smart meters are installed, households are on `flat` or the old `tou_old`
+day/night tariff. `tou` appears as smart meters are installed, and `dynamic` after
+mid-2026.
+
+## Things to know
+
+* **Reproducibility.** The model is stochastic at every level. `set.seed()` fixes a
+  single-process run (`use_parallel = FALSE`). Parallel runs are not reproducible with
+  R's default random number generator.
+* **Price paths are not returned.** `runABM()` returns the household states but not the
+  price path that each run used.
+* **Choosing a behavioural model.** `"prospect"` and `"full"` are the current models.
+  `"full"` is the default in `runABM()`; see `vignette("model-description")`, section 7.
+* **Scenarios.** `sD` is the base scenario. Other scenarios are sheets in
+  `inst/ext_data/scenario_parameters.xlsx` and can be read with `readxl::read_xlsx()`
+  into a data frame with the same columns as `sD`.

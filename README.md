@@ -17,6 +17,9 @@ agent-based model designed to (1) project the uptake of dynamic
 electricity tariffs on Irish consumers and (2) investigate consequences
 for the power system.
 
+**Documentation:**
+<https://phalacrocorax-gaimardi.github.io/depmicrosimr/>
+
 ## Installation
 
 You can install the development version of *depmicrosimr* using:
@@ -25,7 +28,7 @@ You can install the development version of *depmicrosimr* using:
 remotes::install_github("phalacrocorax-gaimardi/depmicrosimr")
 ```
 
-## Examples
+## Example
 
 *depmicrosimr* simulates load-shifting arising from a switch from flat
 to dynamic pricing using a penalised quadratic model and the OSQP
@@ -36,22 +39,40 @@ fraction $`\phi`$. A household can tolerate departures from the
 over periods shorter than $`\tau`$ with little penalty, but the penalty
 grows steeply over periods longer than $`\tau`$.
 
-Wholesale prices are contained in *sem_prices_2023_2025*. The example
-below assumes the standard urban load profile LP1 from the dataset
-*load_profiles*.
+The example below simulates one year of dynamic prices and finds the
+load profile that minimises the bill of a household whose natural load
+is the standard urban profile LP1.
 
 ``` r
 library(depmicrosimr)
-#optimise load-shifting behaviour based on 2025 wholesale prices for a household with "natural" load profile LP1
-demand <- make_demand_response_data(profile="lp1",mean_daily_load=20,years=2025)
-#assume 50% of load is flexible, behavioural cost parameter is 0.5, loads are shiftable over 24h period.
-demand_response <- get_flex(demand,phi=0.5,tau=24,gamma=0.5)
-#add a day of year column
-demand_response <- demand_response %>% dplyr::mutate(yday=lubridate::yday(datetime))
-#plot the unshifted and shifted loads for February
+library(dplyr)
 library(ggplot2)
-dr <- demand_response %>% dplyr::filter(yday %in% 32:60) 
-dr %>% ggplot()+geom_line(aes(datetime,load_opt),colour="orange")+geom_line(aes(datetime,load),colour="grey50",linetype="dotted")
+
+set.seed(1)
+prices <- set_prices(sD)
+
+# dynamic-tariff prices for 2026 with a 4,200 kWh/year household on profile LP1
+demand <- prices %>%
+  filter(tariff_plan == "dynamic", lubridate::year(datetime) == 2026) %>%
+  inner_join(load_profiles_generalised %>% select(datetime, lp1)) %>%
+  mutate(load = 4200 * lp1) %>%
+  select(datetime, price, load)
+
+# 50% of load is flexible, behavioural cost parameter 0.5, loads shiftable over about 24 h
+demand_response <- get_flex(demand, phi = 0.5, tau = 24, gamma = 0.5)
+
+# plot the unshifted and shifted loads for February
+demand_response %>%
+  filter(lubridate::yday(datetime) %in% 32:60) %>%
+  ggplot() +
+  geom_line(aes(datetime, load_opt), colour = "orange") +
+  geom_line(aes(datetime, load), colour = "grey50", linetype = "dotted")
 ```
 
 <img src="man/figures/README-example-1.png" width="100%" />
+
+See the [Getting
+started](https://phalacrocorax-gaimardi.github.io/depmicrosimr/articles/getting-started.html)
+article to run the full agent-based model, and the [Model
+description](https://phalacrocorax-gaimardi.github.io/depmicrosimr/articles/model-description.html)
+for how it works.

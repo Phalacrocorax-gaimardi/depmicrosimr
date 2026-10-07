@@ -14,7 +14,6 @@ get_flex_scores(
   eta,
   tau,
   kernel,
-  profile = "LP1",
   prices_scen
 )
 }
@@ -37,19 +36,22 @@ get_flex_scores(
 
 \item{kernel}{defaut to "exp"}
 
-\item{profile}{LP1 or LP3}
-
 \item{prices_scen}{price scenario}
+}
+\value{
+a single row dataframe
 }
 \description{
 Evaluates a measure of how much load has been shifted in response a specific price incentive (tariff plan). The flexibility is defined as
 \deqn{ \frac{1}{2} \frac{\sum_t |L_{optimised}-L_{natural}|}{\sum_t L_{natural}}}The evaluation period is one year. This is the same as \eqn{\frac{1}{2} \sum_t \mid x_t \mid} (see \code{get_flex})\cr
 \cr
 The main use of this function is to map out the relationship flexibility parameters and stated flexibility scores.
+\cr
+Based on the LP1 profile (2026 urban flat rate)
 }
 \examples{
-prices_scen <- set_prices(sD)
-get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp","LP1",prices_scen)
-get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp","LP1",prices_scen)
+#prices_scen <- set_prices(sD)
+#get_flex_scores(sD,2026,8760,"tou",0.7,0,0,48,"exp",prices_scen)
+#get_flex_scores(sD,2026,8760,"tou",1,1,0.6,48,"exp",prices_scen)
 
 }

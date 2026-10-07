@@ -4,7 +4,11 @@
 \alias{make_artificial_society}
 \title{make_artificial_society}
 \usage{
-make_artificial_society(society = society, homophily = homophily, nu = 4.5)
+make_artificial_society(
+  society = depmicrosimr::dep_society_1,
+  homophily = depmicrosimr::homophily,
+  nu = 4.5
+)
 }
 \arguments{
 \item{society}{dataframe containing society}
@@ -21,6 +25,6 @@ Creates a homophilous social influence network based on demographic attributes c
 weights in \emph{homophily}.
 }
 \examples{
-make_artificial_society(dep_society,homophily,nu=4.5)
+make_artificial_society(dep_society_1,homophily,nu=4.5)
 
 }

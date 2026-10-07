@@ -4,3 +4,7 @@
 ^\.positai$
 ^\.claude$
 ^README\.Rmd$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$

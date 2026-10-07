@@ -5,7 +5,7 @@
 \alias{sD}
 \title{sD}
 \format{
-A data frame with 19 rows and 6 variables:
+A data frame with 48 rows and 6 variables:
 \describe{
 \item{\code{category}}{character COLUMN_DESCRIPTION}
 \item{\code{variable}}{character COLUMN_DESCRIPTION}

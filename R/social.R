@@ -16,9 +16,9 @@
 #' @export
 #' @importFrom magrittr %>%
 #' @examples
-#' make_artificial_society(dep_society,homophily,nu=4.5)
+#' make_artificial_society(dep_society_1,homophily,nu=4.5)
 #'
-make_artificial_society <- function(society=society,homophily=homophily,nu=4.5){
+make_artificial_society <- function(society=depmicrosimr::dep_society_1,homophily=depmicrosimr::homophily,nu=4.5){
   #create a random homophilous social network
   #social distance measure=gower distance
   #nu gives the social distance decay exponentlarger mu higher assortativity

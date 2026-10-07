@@ -15,7 +15,9 @@ net_prices(scen)
 \details{
 Regulated network charges are ToU dependent and yeartime dependent. Charges at yeartime in a scenario are obtained from
 peak_network_charge_fun(scen,yeartime) etc. There is a supplier uplift on top of the regulated network charge. The model assumes that
-wholesale prices + VAT are passed through.
+wholesale prices + VAT are passed through.\cr
+\cr
+Not called by set_prices() so this function is for info only.
 }
 \examples{
 net_prices(sD)

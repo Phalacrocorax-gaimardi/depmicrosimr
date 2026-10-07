@@ -1,7 +1,7 @@
 Package: depmicrosimr
 Type: Package
 Title: Agent-based simulations of the uptake of dynamic electricity pricing tariffs by Irish households
-Version: 0.1.77
+Version: 0.1.78
 Authors@R: c(
     person(
       "Jack", "Reardon",
@@ -11,7 +11,7 @@ Authors@R: c(
       "Pranay", "Kumar",
       email = "pranay.kumar@ucd.ie",
       role = "aut"),
-      person( "Ryan","Lisa",
+      person( "Lisa","Ryan",
       email = "lisa.ryan@ucd.ie",
       role = "aut"),
       person("Joe", "Wheatley",
@@ -27,7 +27,7 @@ LazyData: true
 Imports: 
     cluster,
     HiddenMarkov,
-    dplyr,
+    dplyr (>= 1.1.0),
     fabletools,
     feasts,
     igraph,
@@ -44,13 +44,19 @@ Imports:
     tidyr,
     tsibble,
     zoo,
-    purrr,
+    purrr  (>= 1.0.0),
     parallel,
     slider
 Suggests:
     kableExtra,
-    knitr
+    knitr,
+    ggplot,
+    rmarkdown
 RoxygenNote: 7.3.1
 LazyDataCompression: xz
 Depends: 
-    R (>= 2.10)
+    R (>= 4.1)
+URL: https://phalacrocorax-gaimardi.github.io/depmicrosimr/,
+    https://github.com/phalacrocorax-gaimardi/depmicrosimr
+BugReports: https://github.com/phalacrocorax-gaimardi/depmicrosimr/issues
+VignetteBuilder: knitr
