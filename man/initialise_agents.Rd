@@ -4,14 +4,7 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(
-  scen,
-  start_year = 2019,
-  prices_scen,
-  social_network,
-  eta = 0.3,
-  phi = 0.4
-)
+initialise_agents(scen, start_year = 2019, prices_scen, social_network)
 }
 \arguments{
 \item{scen}{scenario design dataframe e.g. sD}
@@ -21,10 +14,6 @@ initialise_agents(
 \item{prices_scen}{tariff prices dataframe}
 
 \item{social_network}{social network}
-
-\item{eta}{eta flex parameter value}
-
-\item{phi}{\eqn{\phi} parameter choice}
 }
 \value{
 a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
@@ -58,5 +47,5 @@ Each agent becomes aware of the existence of DEP as a tariff choice at a random 
 \examples{
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-test <- initialise_agents(sD,2019,prices_scen,social_network,0.3,0.4)
+test <- initialise_agents(sD,2019,prices_scen,social_network)
 }

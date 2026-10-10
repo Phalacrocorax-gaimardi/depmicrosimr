@@ -33,8 +33,6 @@
 #' @param start_year default 2019
 #' @param prices_scen tariff prices dataframe
 #' @param social_network social network
-#' @param eta eta flex parameter value
-#' @param phi \eqn{\phi} parameter choice
 #'
 #'
 #' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
@@ -42,9 +40,13 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' test <- initialise_agents(sD,2019,prices_scen,social_network,0.3,0.4)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,eta=0.3,phi=0.4){
+#' test <- initialise_agents(sD,2019,prices_scen,social_network)
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 
+  eta <- scen %>% dplyr::filter(parameter=="eta.") %>% dplyr::pull(value)
+  phi <- scen %>% dplyr::filter(parameter=="phi.") %>% dplyr::pull(value)
+  #print(eta)
+  #print(phi)
   #agents_in has a minimal set of survey data
   stopifnot(eta %in% flex_scores$eta & phi %in% flex_scores$phi)
   #
@@ -160,7 +162,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,e
   #print(agents_in %>% dplyr::count(tariff_plan) %>% dplyr::mutate(frequency = n / sum(n)) %>% dplyr::select(-n))
   median_flex_score <- agents_in
   weighted_mean <- agents_in %>% dplyr::mutate(w= kWh/sum(kWh), wflex=w*flex_score) %>% dplyr::pull(wflex) %>% sum()#*sum(agents_in$kWh)
-  print(paste("The maximum possible initial flexibility is ",round(max_flex,0),"%",sep=""))
+  print(paste("With phi=",phi," and eta=",eta,",the maximum possible initial flexibility is ",round(max_flex,0),"%",sep=""))
   print(paste("median household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
   print(paste("weighted mean of household flexibilities", round(median(agents_in$flex_score),1)))
   #print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
@@ -278,6 +280,8 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
       #c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
 
       c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
+      #social influence is handled differently for to and dynamic
+      #the socially influenced c_det_soc never exceeds c_you
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
       result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params)
