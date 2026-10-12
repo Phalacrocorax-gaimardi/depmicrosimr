@@ -7,12 +7,13 @@
 get_full_annual_cost(
   kWh = 4200,
   tariff_plan,
-  phi = 0.4,
+  phi = 0.6,
   gamma = 2,
-  eta = 0.3,
+  eta = 0.5,
   tau = 36,
   natural_profile = "LP1",
   prices_scen,
+  foresight = FALSE,
   params
 )
 }
@@ -33,6 +34,8 @@ get_full_annual_cost(
 
 \item{prices_scen}{price scenario}
 
+\item{foresight}{if FALSE then agent assesses last year's prices for tariff decision. If TRUE perfect foresight over one year is assumed.}
+
 \item{params}{parameters at yeartime}
 }
 \value{
@@ -44,8 +47,10 @@ dataframe with cost breakdown
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2026)
-#get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
-get_full_annual_cost(8760,"tou",phi=0.4,gamma=5,eta=0.3,tau=24,"LP1",prices_scen,params)
-#get_full_annual_cost(8760,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-#get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
+get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,foresight=TRUE,params)
+get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,foresight=FALSE,params)
+#get_full_annual_cost(8760,"tou",phi=0.6,gamma=5,eta=0.5,tau=24,"LP1",prices_scen,foresight=TRUE,params)
+#get_full_annual_cost(8760,"tou",phi=0.6,gamma=5,eta=0.5,tau=24,"LP1",prices_scen,foresight=FALSE,params)
+#get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=FALSE,params)
+#get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=TRUE,params)
 }

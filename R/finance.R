@@ -9,8 +9,6 @@
 #use_data(load_profiles,overwrite=T)
 
 
-
-
 #' get_flex
 #'
 #' get_flex solves for the flexible hourly household load pattern \eqn{L_t} that optimises the cost to a household over the hourly period 1:T. Here, the "cost" represents
@@ -195,6 +193,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
 #' get_full_annual_cost
 #'
 #' \code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
+#' Agents calculate the cost using the previous year's prices if \code{foresight=FALSE}. If \code{foresight=TRUE} perfect foresight over the next year is assumed.
 #'
 #' @param kWh annual kWh
 #' @param tariff_plan tariff plan
@@ -204,6 +203,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
 #' @param tau energy recovery horizon
 #' @param natural_profile L1 or LP3 at the moment
 #' @param prices_scen price scenario
+#' @param foresight if FALSE then agent assesses last year's prices for tariff decision. If TRUE perfect foresight over one year is assumed.
 #' @param params parameters at yeartime
 #'
 #' @returns dataframe with cost breakdown
@@ -212,31 +212,38 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2026)
-#' #get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,params)
-#' get_full_annual_cost(8760,"tou",phi=0.4,gamma=5,eta=0.3,tau=24,"LP1",prices_scen,params)
-#' #get_full_annual_cost(8760,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-#' #get_annual_cost(4200,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=60,"LP1",prices_scen,params)
-get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.3, tau=36,natural_profile="LP1", prices_scen,params) {
+#' get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,foresight=TRUE,params)
+#' get_full_annual_cost(8760,"flat",0.4,10,0.3,24,"LP1",prices_scen,foresight=FALSE,params)
+#' #get_full_annual_cost(8760,"tou",phi=0.6,gamma=5,eta=0.5,tau=24,"LP1",prices_scen,foresight=TRUE,params)
+#' #get_full_annual_cost(8760,"tou",phi=0.6,gamma=5,eta=0.5,tau=24,"LP1",prices_scen,foresight=FALSE,params)
+#' #get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=FALSE,params)
+#' #get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=TRUE,params)
+get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.5, tau=36,natural_profile="LP1", prices_scen,foresight=FALSE,params) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   yeartime <- params$yeartime
   kernel="exp"
-
+  #
   standing_charge <- params[[paste0("standing_charge_", tariff_plan)]]
   profile <- tolower(natural_profile)
   load <- depmicrosimr::load_profiles_generalised %>% dplyr::select(datetime,any_of(profile))
   #prices <- prices %>% dplyr::select(datetime,tariff_plan,profile)
   prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
   # 1. Fast date boundary calculation
-  start_time <- lubridate::date_decimal(yeartime)
-  end_time   <- lubridate::date_decimal(yeartime + 1)
+  if(!foresight)
+   {
+    start_time <- lubridate::date_decimal(yeartime) - lubridate::years(1)
+    end_time   <- lubridate::date_decimal(yeartime)
+   }
+  else{
+    start_time <- lubridate::date_decimal(yeartime)
+    end_time   <- lubridate::date_decimal(yeartime) + lubridate::years(1)
+  }
 
-  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
-                                        datetime <= end_time)
+  df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time, datetime <= end_time)
 
   df$load <- df[[profile]] * kWh
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
-
 
   W <- ceiling(5 * tau) #might not be great for cauchy kernel
   lags <- 0:W
@@ -325,8 +332,6 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.4, gamma=2, eta=0.
     )
   )
 }
-
-
 
 #' get_annual_cost
 #'
@@ -551,7 +556,10 @@ tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) #%>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
   #apply VAT & margin to all prices
   result <- result %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state),by="datetime")
-  result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,lubridate::decimal_date(datetime)))*price) %>% dplyr::select(-tou_band)
+  result <- result %>% dplyr::mutate(price=(1+vat_rate_fun(scen,lubridate::decimal_date(datetime)))*price) %>% dplyr::select(-tou_band)
+  #duplicate 2019 prices to 2018
+  result_2018 <- result %>% dplyr::filter(lubridate::year(datetime)==2019) %>% dplyr::mutate(datetime=datetime-lubridate::years(1))
+  result_2018 %>% dplyr::bind_rows(result)
 }
 
 
@@ -948,18 +956,18 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
 evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
 
-  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
-
+  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
+  #
   costs <- tibble::tibble(flat=costs_flat$annual_bill_inflexible,tou_noflex=NA,tou_flex=NA,det_noflex=NA,det_flex=NA)
-
+  #
   if(params$yeartime >= smart_rollout){
-    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
+    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
     costs$tou_noflex <- costs_tou$annual_bill_inflexible
     costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
   }
 
   if(params$yeartime >= dyn_aware){
-    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,params)  #print(costs)
+    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
     costs$det_noflex <- costs_det$annual_bill_inflexible
     costs$det_flex <- costs_det$annual_bill_flexible+costs_det$penalty+costs_det$kinetic
   }

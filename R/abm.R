@@ -521,7 +521,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
     #closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
     w <- scen %>% dplyr::filter(parameter=="w.") %>% dplyr::pull(value)
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det","foresight"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det,"FALSE"))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
