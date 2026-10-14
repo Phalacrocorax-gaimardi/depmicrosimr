@@ -43,6 +43,7 @@ dataframe with cost breakdown
 }
 \description{
 \code{get_full_cost()} functional calculates the projected annual electricity cost at \code{params$yeartime}. Unlike \code{get_annual_cost()}, the behavioural costs arising are included.
+Agents calculate the cost using the previous year's prices if \code{foresight=FALSE}. If \code{foresight=TRUE} perfect foresight over the next year is assumed.
 }
 \examples{
 prices_scen <- set_prices(sD)

@@ -199,13 +199,14 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 #'
 #' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2030,agents_1,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
-update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network, ignore_social = FALSE, behavioural_model = "prospect", ignore_theta = TRUE, quiet = TRUE) {
+update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network, ignore_social = FALSE, behavioural_model = "full", ignore_theta = TRUE, quiet = TRUE) {
 
   stopifnot(behavioural_model %in% c("prospect", "classic", "full", "test"))
   params <- scenario_params(scen, yeartime)
   c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
   c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
   c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
+  foresight <- scen  |> dplyr::filter(parameter == "foresight") |> dplyr::pull(value) |> as.logical()
 
   a_s <- agents_in
   n_tou <- dim(a_s %>% dplyr::filter(tariff_plan == "tou" | tariff_plan == "tou_old"))[1]
@@ -313,7 +314,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
       c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
-      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen,foresight, params)
 
       new_plan <- result$decision
       new_bill <- switch(new_plan,

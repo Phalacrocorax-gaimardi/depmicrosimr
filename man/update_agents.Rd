@@ -11,7 +11,7 @@ update_agents(
   prices_scen,
   social_network,
   ignore_social = FALSE,
-  behavioural_model = "prospect",
+  behavioural_model = "full",
   ignore_theta = TRUE,
   quiet = TRUE
 )

@@ -943,6 +943,7 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' @param flex_certainty_det confidence in det flexibility
 #' @param lambda loss aversion
 #' @param prices_scen price scenario
+#' @param foresight if TRUE use perfect foresight, of FALSE use perfect hindsight
 #' @param params parameters at params$yeartime
 #'
 #' @returns a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}
@@ -952,11 +953,11 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' params <- scenario_params(sD,2032)
-#' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
+#' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,foresight=FALSE,params)
 #' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
-evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
+evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,foresight=FALSE,params) {
 
-  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
+  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
   #
   costs <- tibble::tibble(flat=costs_flat$annual_bill_inflexible,tou_noflex=NA,tou_flex=NA,det_noflex=NA,det_flex=NA)
   #

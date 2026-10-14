@@ -14,7 +14,6 @@
 #load_profiles_generalised <- readr::read_csv("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/load_profiles_generalised.csv")
 
 
-
 #' scenario_params
 #'
 #' builds the complete parameter set at yeartime from scenario scen
@@ -66,7 +65,6 @@ fast_params <- function(params_long){
   test <- list2env(test)
   return(test)
 }
-
 
 #' survey_bills_to_kwh
 #'

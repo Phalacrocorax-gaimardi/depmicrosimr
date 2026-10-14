@@ -18,6 +18,7 @@ evaluate_full_cost(
   flex_certainty_det = 0.7,
   lambda = 2.25,
   prices_scen,
+  foresight = FALSE,
   params
 )
 }
@@ -48,6 +49,8 @@ evaluate_full_cost(
 
 \item{prices_scen}{price scenario}
 
+\item{foresight}{if TRUE use perfect foresight, of FALSE use perfect hindsight}
+
 \item{params}{parameters at params$yeartime}
 }
 \value{
@@ -70,6 +73,6 @@ those times awareness is random.
 \examples{
 prices_scen <- set_prices(sD)
 params <- scenario_params(sD,2032)
-evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
+evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,foresight=FALSE,params)
 evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
 }
