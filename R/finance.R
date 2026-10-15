@@ -962,13 +962,13 @@ evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile =
   costs <- tibble::tibble(flat=costs_flat$annual_bill_inflexible,tou_noflex=NA,tou_flex=NA,det_noflex=NA,det_flex=NA)
   #
   if(params$yeartime >= smart_rollout){
-    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
+    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
     costs$tou_noflex <- costs_tou$annual_bill_inflexible
     costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
   }
 
   if(params$yeartime >= dyn_aware){
-    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight=FALSE,params)  #print(costs)
+    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
     costs$det_noflex <- costs_det$annual_bill_inflexible
     costs$det_flex <- costs_det$annual_bill_flexible+costs_det$penalty+costs_det$kinetic
   }

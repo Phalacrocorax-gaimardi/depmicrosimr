@@ -207,6 +207,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
   c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
   c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
   foresight <- scen  |> dplyr::filter(parameter == "foresight") |> dplyr::pull(value) |> as.logical()
+  stopifnot(is.logical(foresight) & !is.na(foresight))
 
   a_s <- agents_in
   n_tou <- dim(a_s %>% dplyr::filter(tariff_plan == "tou" | tariff_plan == "tou_old"))[1]
