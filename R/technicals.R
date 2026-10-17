@@ -546,7 +546,8 @@ sem_prices <- function(scen,end_year=2040,shock=FALSE){
   trend_logprices <- trend_logprices %>% dplyr::mutate(trend=zoo::na.approx(trend))
   #optionally add a wholesale price shock in 2030 modelled as a half exponential
   if(shock) {
-    shock_time <- lubridate::ymd_hms("2030-01-01 00:00:00")
+    #shock characteristics are hard-wired
+    shock_time <- lubridate::ymd_hms("2032-01-01 00:00:00")
     shock_strength <- 4
     logp0 <- dplyr::filter(trend_logprices, datetime==shock_time) %>% dplyr::pull(trend)
     p_shock <- shock_strength*scale0*sinh(logp0)

@@ -45,5 +45,5 @@ Optionally, the CRU wholesale price cap (currently 0.5euro/kWh) can be turned of
 Flat and ToU tariffs can be set retrospectively or based on forecast prices. Probably, retrospective price setting is best.
 }
 \examples{
-set_prices(sD)
+set_prices(sD,shock="TRUE")
 }

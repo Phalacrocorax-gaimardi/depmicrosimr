@@ -489,7 +489,7 @@ get_annual_cost_simple <- function(yeartime, kWh, tariff_plan, profile="LP1", pr
 #' @export
 #'
 #' @examples
-#' set_prices(sD)
+#' set_prices(sD,shock="TRUE")
 set_prices <- function(scen,end_year=2045,cru_cap=TRUE,shock=FALSE){
   #
   #fraction of gains from flexibility that retail suppliers not passed on (default 1/3)
