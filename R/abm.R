@@ -432,7 +432,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
   Nt <- round((simulation_end-year_zero+1)*6)
   #seeds for prices_scen reproducibility
   run_seeds <- sample.int(.Machine$integer.max, Nrun)
-
+  foresight <- scen  |> dplyr::filter(parameter == "foresight") |> dplyr::pull(value) |> as.logical()
   #single worker (abm run idex j)
   run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,shock,w,quiet){
 
@@ -523,7 +523,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
     #closeAllConnections()
     #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
     w <- scen %>% dplyr::filter(parameter=="w.") %>% dplyr::pull(value)
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det","foresight"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det,"FALSE"))
+    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det","foresight"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det,foresight))
     #replace "t" with dates
     abm <- abm %>% purrr::list_rbind()
     abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
