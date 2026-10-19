@@ -689,7 +689,7 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_
 #' @param tau \eqn{\tau}
 #' @param natural_profile the characteristic profile of the household (currently LP1 or LP3)
 #' @param smart_rollout smart meter rollout time
-#' @param dyn_aware year of dynmaic choice awareness
+#' @param dyn_aware year of dynamic choice awareness
 #' @param prices_scen price scenario
 #' @param params scenario parameters at yeartime
 #'
@@ -702,9 +702,9 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_
 #' @examples
 #' # sample values for standalone development/testing  in the real ABM these come from a
 #' # specific agent's row (e.g. agents[1, ]) rather than being typed in by hand
-#' prices_scen <- set_prices(sD)
-#' params <- scenario_params(sD,2031)
-#' get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020,dyn_aware=2027, prices_scen,params)
+#' #prices_scen <- set_prices(sD)
+#' #params <- scenario_params(sD,2031)
+#' #get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020,dyn_aware=2027, prices_scen,params)
 #'
 get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout, dyn_aware,prices_scen,params) {
 
@@ -791,10 +791,10 @@ get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_pro
 #' @export
 #'
 #' @examples
-#' prices_scen <- set_prices(sD)
-#' params <- scenario_params(sD,2032)
-#' #costs <- get_prospect_costs_light(sD,8760, 0.4, 5, 0.3, 48, "LP1", 2025, prices_scen,params)
-#' #get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.8,0.7,2.25)
+#' #prices_scen <- set_prices(sD)
+#' #params <- scenario_params(sD,2032)
+#' #costs <- get_prospect_costs_light(sD,4200, phi=0.4, gamma=5, eta=0.3, tau=24, "LP1", 2025,2028.5, prices_scen,params)
+#' #get_ce_value(sD,costs$flat, costs$tou_noflex, costs$tou_flex, costs$det_noflex, costs$det_flex,0.65,0.45,2.25)  %>% tibble::as_tibble()
 get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,flex_certainty_tou=0.8,flex_certainty_det=0.7,lambda=2.25) {
   # --- load in the prospect-theory parameters (same lookup pattern as every other
   #     scenario-driven function in the package) ---
@@ -885,9 +885,12 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' @export
 #'
 #' @examples
-#' prices_scen <- set_prices(sD)
-#' params <- scenario_params(sD,2032)
-#' evaluate_tariffs(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.6,0.5,10.25,prices_scen = prices_scen,params)
+#' #scen <- readxl::read_xlsx("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/scenario_parameters.xlsx",sheet="EDSC")
+#' #scen[scen$parameter=="sem_price_2030","value"] <- 0.0
+#' #scen[scen$parameter=="sem_price_2040","value"] <- 0.0
+#' #prices_scen <- set_prices(scen)
+#' #params <- scenario_params(scen,2030)
+#' #evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.4, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce %>% tibble::as_tibble()
 evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
 
   costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, dyn_aware,prices_scen,params)

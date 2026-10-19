@@ -62,7 +62,10 @@ Agents' prospect-theory evaluation of the initial fixed to flexible switching de
 \code{update_agents()} in place of the classic savings/social/theta decision.
 }
 \examples{
-prices_scen <- set_prices(sD)
-params <- scenario_params(sD,2032)
-evaluate_tariffs(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.6,0.5,10.25,prices_scen = prices_scen,params)
+#scen <- readxl::read_xlsx("C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/scenario_parameters.xlsx",sheet="EDSC")
+#scen[scen$parameter=="sem_price_2030","value"] <- 0.0
+#scen[scen$parameter=="sem_price_2040","value"] <- 0.0
+#prices_scen <- set_prices(scen)
+#params <- scenario_params(scen,2030)
+#evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.4, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce \%>\% tibble::as_tibble()
 }
