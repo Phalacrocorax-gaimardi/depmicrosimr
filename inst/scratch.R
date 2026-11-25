@@ -1421,3 +1421,15 @@ dst_dates <- dst_dates %>% mutate(dst_start=dmy(dst_start),dst_end=dmy(dst_end))
 #write_csv(dst_dates,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/dst_dates.csv")
 
 #write_csv(load_profiles_generalised,"C:/Users/Joe/pkgs/depmicrosimr/inst/ext_data/load_profiles_generalised.csv")
+
+##############
+# reduced ev survey data
+############
+
+probs <- ev_survey %>% dplyr::filter(q59_3 < 8)  %>% dplyr::pull(q59_3) %>% table()/833
+ev_surv <- ev_surv %>% dplyr::select(serial,q58,q58_1,q59_3)
+ev_surv <- ev_surv %>% dplyr::rowwise() %>% dplyr::mutate(q59_3 = ifelse(q59_3 == 8, sample(1:7,1,prob=probs),q59_3))
+ev_surv <- ev_survey %>% dplyr::mutate(has_car = (q58 != 1), has_ev = (q58_1==4),km=mileage_vals[q59_3]/365)  %>% dplyr::select(serial,has_car,has_ev,km)
+ev_surv$serial <- as.character(ev_surv$serial)
+readr::write_csv(ev_surv,"inst/ext_data/ev_surv.csv")
+

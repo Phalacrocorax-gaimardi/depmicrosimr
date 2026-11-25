@@ -66,6 +66,6 @@ Agents' prospect-theory evaluation of the initial fixed to flexible switching de
 #scen[scen$parameter=="sem_price_2030","value"] <- 0.0
 #scen[scen$parameter=="sem_price_2040","value"] <- 0.0
 #prices_scen <- set_prices(scen)
-#params <- scenario_params(scen,2030)
-#evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.4, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce \%>\% tibble::as_tibble()
+#params <- scenario_params(scen,2040)
+#evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.3, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce \%>\% tibble::as_tibble()
 }

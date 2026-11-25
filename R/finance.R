@@ -889,8 +889,8 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' #scen[scen$parameter=="sem_price_2030","value"] <- 0.0
 #' #scen[scen$parameter=="sem_price_2040","value"] <- 0.0
 #' #prices_scen <- set_prices(scen)
-#' #params <- scenario_params(scen,2030)
-#' #evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.4, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce %>% tibble::as_tibble()
+#' #params <- scenario_params(scen,2040)
+#' #evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.3, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce %>% tibble::as_tibble()
 evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
 
   costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, dyn_aware,prices_scen,params)
@@ -969,7 +969,6 @@ evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile =
     costs$tou_noflex <- costs_tou$annual_bill_inflexible
     costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
   }
-
   if(params$yeartime >= dyn_aware){
     costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
     costs$det_noflex <- costs_det$annual_bill_inflexible

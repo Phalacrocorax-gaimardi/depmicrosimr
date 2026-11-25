@@ -47,5 +47,5 @@ Each agent becomes aware of the existence of DEP as a tariff choice at a random 
 \examples{
 prices_scen <- set_prices(sD)
 social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-test <- initialise_agents(sD,2019,prices_scen,social_network)
+agents <- initialise_agents(sD,2019,prices_scen,social_network)
 }

@@ -40,7 +40,7 @@
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
-#' test <- initialise_agents(sD,2019,prices_scen,social_network)
+#' agents <- initialise_agents(sD,2019,prices_scen,social_network)
 initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 
   eta <- scen %>% dplyr::filter(parameter=="eta.") %>% dplyr::pull(value)
@@ -166,6 +166,19 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
   print(paste("median household flexibilities", round(weighted_mean,1),"% vs lp1-lp2 flexibility 14.4%"))
   print(paste("weighted mean of household flexibilities", round(median(agents_in$flex_score),1)))
   #print(paste("maxiumum flexibility theoretical", 100*(1-phi), "actual", max(agents_in$flex_score)))
+  #################
+  # add EVs
+  #################
+  #ev_surv <- ev_survey %>% dplyr::mutate(has_car = (q58 != 1), has_ev = (q58_1==4),km=mileage_vals[q59_3]/365)  %>% dplyr::select(serial,has_car,has_ev,km)
+  ev_surv$serial <- as.character(ev_surv$serial)
+  agents_in <- agents_in %>% dplyr::left_join(ev_surv,by="serial")
+  agents_in <- agents_in %>% dplyr::mutate(has_car = ifelse(is.na(has_car), FALSE, has_car), has_ev = ifelse(is.na(has_ev), FALSE, has_ev))
+  #hard-wired 50% adoption at end of 2040
+  bass_params <- bass_ev_params(share_end = 0.5, share_start = mean(agents_in$has_ev[agents_in$has_car]))
+  agents_in <- update_ev_adoption(agents_in, start_year, bass_params = bass_params)      # first call: backcast to 2019
+  #add heterogeneous annual energy use ev_kWh
+  agents_in <- agents_in %>% dplyr::mutate(ev_kwh=km*ev_kwhp100km)
+
   agents_in %>% dplyr::select(-flex_score_0,-tou_adopter) %>% return()
   #agents_in %>% return()
 }
