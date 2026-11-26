@@ -107,7 +107,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
   } else if(kernel=="cauchy") {
     1/(1+(lags/(0.6366*tau))^2)
   } else if(kernel=="exp"){
-      exp(-(lags /tau))
+    exp(-(lags /tau))
   } else {
     exp(-(lags/(1.128*tau))^2)
   }
@@ -205,6 +205,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
 #' @param prices_scen price scenario
 #' @param foresight if FALSE then agent assesses last year's prices for tariff decision. If TRUE perfect foresight over one year is assumed.
 #' @param params parameters at yeartime
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()}); the EV bill is included in the annual bills
 #'
 #' @returns dataframe with cost breakdown
 #' @export
@@ -218,7 +219,7 @@ get_flex <- function(demand, phi = 0.4, gamma = 5, eta = 0.3,tau = 24,kernel="ex
 #' #get_full_annual_cost(8760,"tou",phi=0.6,gamma=5,eta=0.5,tau=24,"LP1",prices_scen,foresight=FALSE,params)
 #' #get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=FALSE,params)
 #' #get_full_annual_cost(4200,"dynamic",phi=0.6,gamma=5,eta=0.5,tau=60,"LP1",prices_scen,foresight=TRUE,params)
-get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.5, tau=36,natural_profile="LP1", prices_scen,foresight=FALSE,params) {
+get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.5, tau=36,natural_profile="LP1", prices_scen,foresight=FALSE,params,ev=NULL) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   yeartime <- params$yeartime
@@ -231,10 +232,10 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.
   prices_scen_1 <- prices_scen %>% dplyr::inner_join(load,by=c("datetime",profile)) %>% dplyr::filter(tariff_plan==.env$tariff_plan)
   # 1. Fast date boundary calculation
   if(!foresight)
-   {
+  {
     start_time <- lubridate::date_decimal(yeartime) - lubridate::years(1)
     end_time   <- lubridate::date_decimal(yeartime)
-   }
+  }
   else{
     start_time <- lubridate::date_decimal(yeartime)
     end_time   <- lubridate::date_decimal(yeartime) + lubridate::years(1)
@@ -299,17 +300,18 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.
     return(sum(y^2))
   }
 
-  #flexible loads conditionally
+  #"noflex" = non-EV load unshifted, but the EV is always optimised (automated, no behavioural uncertainty): the
+  #prospect-theory uncertainty applies to the non-EV load only. On flat, ev_flex is charging on arrival.
+  #flexible loads conditionally. With ev = NULL this is identical to get_flex(); a household with an EV
+  #is optimised jointly (non-EV shift + EV charging) by get_flex2(); on the flat tariff and in the
+  #"noflex" counterfactual the EV charges on arrival
+  df <- ev_household_profile(df, ev, flat = (tariff_plan == "flat"), phi, gamma, eta, tau, kernel)
+  bill_inflex <- sum(df$price * (df$load + df$ev_flex)) + standing_charge
+  bill_flex   <- sum(df$price * (df$load_opt + df$ev_flex)) + standing_charge
   if (tariff_plan != "flat") {
-    df <- get_flex(df, phi, gamma, eta, tau,kernel)
-    bill_inflex <- sum(df$price * df$load) + standing_charge
-    bill_flex   <- sum(df$price * df$load_opt) + standing_charge
     ramping_cost <- 0.5*eta_scaled * sum(diff(df$x)^2)
     behavioural_cost <- 0.5*gamma_scaled*compute_behavioural_cost(df$x,tau)
   } else {
-    # For flat tariffs, inflexible and flexible loads are identical
-    bill_inflex <- sum(df$price * df$load) + standing_charge
-    bill_flex   <- bill_inflex
     ramping_cost <- 0
     behavioural_cost <- 0
   }
@@ -349,6 +351,7 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.
 #' @param natural_profile characteristic household usage profile e.g. LP1
 #' @param prices_scen tariff price scenario
 #' @param params scenario environment object
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
 #' @returns a real number, euros
 #' @export
@@ -360,7 +363,7 @@ get_full_annual_cost <- function(kWh=4200, tariff_plan, phi=0.6, gamma=2, eta=0.
 #' get_annual_cost(8760,"tou",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params)
 #' get_annual_cost(8760,"dynamic",phi=0.5,1,eta=0.5,48,"LP1",prices_scen,params) #
 #' get_annual_cost_simple(2030,8760,"dynamic","LP3",prices_scen) #
-get_annual_cost <- function(kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=24,natural_profile="LP1", prices_scen,params) {
+get_annual_cost <- function(kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=24,natural_profile="LP1", prices_scen,params,ev=NULL) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   yeartime <- params$yeartime
@@ -375,23 +378,16 @@ get_annual_cost <- function(kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=24,
 
   # 2. Extract matching records
   df <- prices_scen_1 %>% dplyr::filter(datetime >= start_time,
-                                      datetime <= end_time)
+                                        datetime <= end_time)
 
   # 3. Vectorized baseline load adjustment
   df$load <- df[[profile]] * kWh
   df <- df %>% dplyr::select(datetime,load,price) %>% dplyr::arrange(datetime)
 
-  # 5. Calculate flexible loads conditionally
-  if (tariff_plan != "flat") {
-    df <- get_flex(df, phi, gamma, eta, tau)
-    bill_inflex <- sum(df$price * df$load)
-    bill_flex   <- sum(df$price * df$load_opt)
-    #print(paste("flexibility score", 100*mad(df$load_opt/df$load-1)))
-  } else {
-    # For flat tariffs, inflexible and flexible loads are identical
-    bill_inflex <- sum(df$price * df$load)
-    bill_flex   <- bill_inflex
-  }
+  # 5. Calculate flexible loads (jointly with the EV, if the household has one)
+  df <- ev_household_profile(df, ev, flat = (tariff_plan == "flat"), phi, gamma, eta, tau, "exp")
+  bill_inflex <- sum(df$price * (df$load + df$ev_flex))
+  bill_flex   <- sum(df$price * (df$load_opt + df$ev_flex))
 
   # 6. Return the final dataframe cleanly (No pipes on the return statement!)
   return(
@@ -524,35 +520,35 @@ set_prices <- function(scen,end_year=2045,cru_cap=TRUE,shock=FALSE){
     ) %>%
     tidyr::fill(flat, .direction = "up") %>%
     dplyr::select(-tariff_plan, -price)
-#
-flat_prices$tariff_plan <- "flat"
-flat_prices <- flat_prices %>% dplyr::rename("price"=flat)
+  #
+  flat_prices$tariff_plan <- "flat"
+  flat_prices <- flat_prices %>% dplyr::rename("price"=flat)
 
-tou_hedge <- 0.02
-tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
-  dplyr::group_by(tou_band) %>%
-  dplyr::arrange(datetime, .by_group = TRUE) %>%
-  dplyr::mutate(
-    # Trailing 365-day weighted mean for load profile 1
-    p_lp1 = slider::slide_index_dbl(lp1 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
-      slider::slide_index_dbl(lp1,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
+  tou_hedge <- 0.02
+  tou_prices <- dyn_prices %>% dplyr::mutate(price=price*(1+tou_hedge)) %>%
+    dplyr::group_by(tou_band) %>%
+    dplyr::arrange(datetime, .by_group = TRUE) %>%
+    dplyr::mutate(
+      # Trailing 365-day weighted mean for load profile 1
+      p_lp1 = slider::slide_index_dbl(lp1 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
+        slider::slide_index_dbl(lp1,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
 
-    # Trailing 365-day weighted mean for load profile 2
-    p_lp2 = slider::slide_index_dbl(lp2 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
-      slider::slide_index_dbl(lp2,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
+      # Trailing 365-day weighted mean for load profile 2
+      p_lp2 = slider::slide_index_dbl(lp2 * price, datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE) /
+        slider::slide_index_dbl(lp2,       datetime, sum, .before = lubridate::days(365), .after = -1, .complete = TRUE),
 
-    # Combined weighted ToU price
-    tou = w * p_lp1 + (1 - w) * p_lp2
-  ) %>%
-  # Backfill initial 2019 NAs strictly within each ToU band group
-  tidyr::fill(tou, .direction = "up") %>%
-  dplyr::ungroup() %>% dplyr::arrange(datetime) %>% dplyr::select(-p_lp1, -p_lp2,-price)
+      # Combined weighted ToU price
+      tou = w * p_lp1 + (1 - w) * p_lp2
+    ) %>%
+    # Backfill initial 2019 NAs strictly within each ToU band group
+    tidyr::fill(tou, .direction = "up") %>%
+    dplyr::ungroup() %>% dplyr::arrange(datetime) %>% dplyr::select(-p_lp1, -p_lp2,-price)
 
 
   tou_prices$tariff_plan <- "tou"
   tou_prices <- tou_prices %>% dplyr::rename("price"=tou)
 
- #combine tariffs
+  #combine tariffs
   result <- dplyr::bind_rows(flat_prices,tou_prices,dyn_prices) #%>% dplyr::inner_join(depmicrosimr::load_profiles_generalised,by=c("tou_band","datetime"))
   #apply VAT & margin to all prices
   result <- result %>% dplyr::inner_join(wholesale %>% dplyr::select(datetime,hmm_state),by="datetime")
@@ -629,6 +625,7 @@ vat_rate_fun <- function(scen,yeartime){
 #' @param smart_rollout smart meter rollout time
 #' @param prices_scen price scenario
 #' @param params scenario parameters at params$yeartime
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
 #' @returns dataframe
 #' @export
@@ -639,22 +636,22 @@ vat_rate_fun <- function(scen,yeartime){
 #' tariff_plan_bills(8760,phi=0.5,1,0.5,48,"LP1",2025,prices_scen,params)
 #' tariff_plan_bills(8760,phi=0.5,1,0.5,48,"LP1",2025,prices_scen,params)
 #' tariff_plan_bills(8760,phi=0.5,2,eta=0.5,48,"LP1",2025,prices_scen,params)
-tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_rollout,prices_scen,params){
+tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_rollout,prices_scen,params,ev=NULL){
 
   stopifnot(tolower(natural_profile) %in% c("lp1","lp3"))
   yeartime <- params$yeartime
   plans <- if (yeartime >= 2026.5) {
     c("flat", "tou", "dynamic")
-    } else if (yeartime < smart_rollout) {
+  } else if (yeartime < smart_rollout) {
     c("flat")
-    } else {
+  } else {
     c("flat", "tou")
-    }
+  }
 
   df <- tibble::tibble()
   for(plan in plans){
-   df0 <- get_annual_cost(kWh, plan, phi, gamma, eta, tau, natural_profile, prices_scen,params) |> dplyr::select(tariff_plan,annual_bill_flexible)
-   df <- df |> dplyr::bind_rows(df0)
+    df0 <- get_annual_cost(kWh, plan, phi, gamma, eta, tau, natural_profile, prices_scen,params,ev) |> dplyr::select(tariff_plan,annual_bill_flexible)
+    df <- df |> dplyr::bind_rows(df0)
   }
   df <- df %>% dplyr::rename("annual_bill"=annual_bill_flexible)
   return(df %>% dplyr::arrange(annual_bill))
@@ -692,6 +689,7 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_
 #' @param dyn_aware year of dynamic choice awareness
 #' @param prices_scen price scenario
 #' @param params scenario parameters at yeartime
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
 #' @returns a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,
 #'   det_noflex, det_flex) and \code{profiles} (a named list of hourly \code{(datetime, price, load,
@@ -706,7 +704,7 @@ tariff_plan_bills <- function(kWh,phi,gamma,eta,tau,natural_profile="LP1",smart_
 #' #params <- scenario_params(sD,2031)
 #' #get_prospect_costs_light(sD,kWh = 8760, phi = 0.4, gamma = 5, eta = 0.3, tau = 48,natural_profile = "LP1", smart_rollout = 2020,dyn_aware=2027, prices_scen,params)
 #'
-get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout, dyn_aware,prices_scen,params) {
+get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout, dyn_aware,prices_scen,params,ev=NULL) {
 
   stopifnot(tolower(natural_profile) %in% c("lp1", "lp3"))
   profile <- tolower(natural_profile)
@@ -739,22 +737,22 @@ get_prospect_costs_light <- function(scen,kWh, phi, gamma, eta, tau, natural_pro
       dplyr::arrange(datetime)
   }
 
-  flat_demand <- get_plan_demand("flat")
-  flat_cost <- sum(flat_demand$price * flat_demand$load) +  params$standing_charge_flat
+  flat_demand <- ev_household_profile(get_plan_demand("flat"), ev, flat = TRUE, phi, gamma, eta, tau)
+  flat_cost <- sum(flat_demand$price * (flat_demand$load + flat_demand$ev_flex)) +  params$standing_charge_flat
 
   costs <- list(flat = flat_cost, tou_noflex = NA_real_, tou_flex = NA_real_,
                 det_noflex = NA_real_, det_flex = NA_real_)
 
   if ("tou" %in% plans) {
-    tou_profile <- get_flex(get_plan_demand("tou"), phi, gamma, eta, tau)
-    costs$tou_noflex <- sum(tou_profile$price * tou_profile$load) + params$standing_charge_tou
-    costs$tou_flex   <- sum(tou_profile$price * tou_profile$load_opt) + params$standing_charge_tou
+    tou_profile <- ev_household_profile(get_plan_demand("tou"), ev, flat = FALSE, phi, gamma, eta, tau)
+    costs$tou_noflex <- sum(tou_profile$price * (tou_profile$load + tou_profile$ev_flex)) + params$standing_charge_tou
+    costs$tou_flex   <- sum(tou_profile$price * (tou_profile$load_opt + tou_profile$ev_flex)) + params$standing_charge_tou
   }
 
   if ("dynamic" %in% plans) {
-    det_profile <- get_flex(get_plan_demand("dynamic"), phi, gamma, eta, tau)
-    costs$det_noflex <- sum(det_profile$price * det_profile$load) + params$standing_charge_dynamic
-    costs$det_flex   <- sum(det_profile$price * det_profile$load_opt)  + params$standing_charge_dynamic
+    det_profile <- ev_household_profile(get_plan_demand("dynamic"), ev, flat = FALSE, phi, gamma, eta, tau)
+    costs$det_noflex <- sum(det_profile$price * (det_profile$load + det_profile$ev_flex)) + params$standing_charge_dynamic
+    costs$det_flex   <- sum(det_profile$price * (det_profile$load_opt + det_profile$ev_flex))  + params$standing_charge_dynamic
   }
 
   tibble::as_tibble(costs)
@@ -879,6 +877,7 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' @param lambda loss aversion
 #' @param prices_scen price scenario
 #' @param params parameters at params$yeartime
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
 #' @returns a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}
 #'   output), and \code{decision} (\code{"flat"}, \code{"tou"}, or \code{"dynamic"})
@@ -891,9 +890,9 @@ get_ce_value <- function(scen,flat, tou_noflex, tou_flex, det_noflex, det_flex,f
 #' #prices_scen <- set_prices(scen)
 #' #params <- scenario_params(scen,2040)
 #' #evaluate_tariffs(scen,kWh = 4200, phi = 0.4, gamma = 2, eta = 0.3, tau = 24,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2028,0.65,0.4,2.25,prices_scen = prices_scen,params)$ce %>% tibble::as_tibble()
-evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params) {
+evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,params,ev=NULL) {
 
-  costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, dyn_aware,prices_scen,params)
+  costs <- get_prospect_costs_light(scen,kWh, phi, gamma, eta, tau, natural_profile, smart_rollout, dyn_aware,prices_scen,params,ev)
   #print(costs)
   #certainty_flex_tou  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
   #certainty_flex_det  <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
@@ -948,6 +947,7 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' @param prices_scen price scenario
 #' @param foresight if TRUE use perfect foresight, of FALSE use perfect hindsight
 #' @param params parameters at params$yeartime
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
 #' @returns a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}
 #'   output), and \code{decision} (\code{"flat"}, \code{"tou"}, or \code{"dynamic"})
@@ -958,19 +958,19 @@ evaluate_tariffs <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "
 #' params <- scenario_params(sD,2032)
 #' evaluate_full_cost(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,foresight=FALSE,params)
 #' evaluate_tariffs(sD,kWh = 4200, phi = 0.4, gamma = 5, eta = 0.3, tau = 40,natural_profile = "LP1", smart_rollout = 2025,dyn_aware=2029,0.55,0.4,2.25,prices_scen = prices_scen,params)
-evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,foresight=FALSE,params) {
+evaluate_full_cost <- function(scen,kWh, phi, gamma, eta, tau, natural_profile = "LP1", smart_rollout,dyn_aware,flex_certainty_tou=0.8,flex_certainty_det=0.7, lambda=2.25,prices_scen,foresight=FALSE,params,ev=NULL) {
 
-  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
+  costs_flat <- get_full_annual_cost(kWh,"flat",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params,ev)  #print(costs)
   #
   costs <- tibble::tibble(flat=costs_flat$annual_bill_inflexible,tou_noflex=NA,tou_flex=NA,det_noflex=NA,det_flex=NA)
   #
   if(params$yeartime >= smart_rollout){
-    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
+    costs_tou <- get_full_annual_cost(kWh,"tou",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params,ev)  #print(costs)
     costs$tou_noflex <- costs_tou$annual_bill_inflexible
     costs$tou_flex <- costs_tou$annual_bill_flexible+costs_tou$penalty+costs_tou$kinetic
   }
   if(params$yeartime >= dyn_aware){
-    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params)  #print(costs)
+    costs_det <- get_full_annual_cost(kWh,"dynamic",phi=phi,gamma=gamma,eta=eta,tau=tau,natural_profile,prices_scen,foresight,params,ev)  #print(costs)
     costs$det_noflex <- costs_det$annual_bill_inflexible
     costs$det_flex <- costs_det$annual_bill_flexible+costs_det$penalty+costs_det$kinetic
   }

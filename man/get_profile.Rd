@@ -13,7 +13,8 @@ get_profile(
   eta = 0.3,
   tau = 48,
   natural_profile = "LP1",
-  prices_scen
+  prices_scen,
+  ev = NULL
 )
 }
 \arguments{
@@ -34,9 +35,12 @@ get_profile(
 \item{natural_profile}{natural profile}
 
 \item{prices_scen}{price scenario}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})}
 }
 \value{
-data frame
+data frame with datetime, price, natural_load, optimised_load (both non-EV), ev_natural_load (EV charging on arrival),
+ev_load (EV charging under the tariff plan; optimised for tou/dynamic) and total_load = optimised_load + ev_load
 }
 \description{
 returns the flexible profile from 1-Jan to 31 Dec of year in a given price scenario.\cr

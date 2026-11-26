@@ -19,7 +19,8 @@ evaluate_full_cost(
   lambda = 2.25,
   prices_scen,
   foresight = FALSE,
-  params
+  params,
+  ev = NULL
 )
 }
 \arguments{
@@ -52,6 +53,8 @@ evaluate_full_cost(
 \item{foresight}{if TRUE use perfect foresight, of FALSE use perfect hindsight}
 
 \item{params}{parameters at params$yeartime}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})}
 }
 \value{
 a list: \code{costs} (the five annual costs), \code{ce} (the full \code{get_ce_value()}

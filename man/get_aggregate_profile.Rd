@@ -24,7 +24,8 @@ get_aggregate_profile(
 \item{n_cores}{usually parallel::detectCores() - 2 or similar}
 }
 \value{
-a dataframe with aggregate profile components by tariff
+a dataframe with aggregate profile components by tariff: \code{natural_load} and \code{optimised_load} (non-EV),
+\code{ev_natural_load} (EVs charging on arrival), \code{ev_load} (EV charging under each household's plan) and \code{total_load}
 }
 \description{
 returns the aggregate hourly load implied by the ABM output. This function uses parallel::mclapply and runs

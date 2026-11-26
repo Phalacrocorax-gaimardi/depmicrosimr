@@ -13,7 +13,8 @@ get_annual_cost(
   tau = 24,
   natural_profile = "LP1",
   prices_scen,
-  params
+  params,
+  ev = NULL
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ get_annual_cost(
 \item{prices_scen}{tariff price scenario}
 
 \item{params}{scenario environment object}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})}
 }
 \value{
 a real number, euros

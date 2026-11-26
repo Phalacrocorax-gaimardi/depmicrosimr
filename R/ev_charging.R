@@ -94,6 +94,89 @@ ev_charge_uncontrolled <- function(home, u, charger_kw, c_eta, e0, q_cap = NULL,
 }
 
 
+# ---------------------------------------------------------------------------------------------
+# Helpers that connect get_flex2() to the ABM (all internal)
+# ---------------------------------------------------------------------------------------------
+
+# annual EV grid energy (kWh) from daily distance (km/day, as in ev_surv$km) and consumption (kWh/100km).
+# Owners with missing distance get the median distance of owners with data.
+#' @noRd
+ev_annual_kwh <- function(km_per_day, kwhp100km) {
+  km <- km_per_day
+  if (all(is.na(km))) km <- rep(40, length(km))
+  km[is.na(km)] <- stats::median(km, na.rm = TRUE)
+  km * 365 * kwhp100km / 100
+}
+
+# ev_kwh (annual grid kWh) is defined only while a household owns an EV: it is filled in (from ev_kwhp100km and
+# the daily distance km in ev_surv) for current owners that do not have it yet, and is NA for everyone else.
+# Called after update_ev_adoption(), so households that adopt during the simulation get it in the step they adopt.
+#' @noRd
+add_ev_kwh <- function(agents) {
+  if (!("ev_kwhp100km" %in% names(agents))) return(agents)
+  if (!("ev_kwh" %in% names(agents))) agents$ev_kwh <- NA_real_
+  owner <- !is.na(agents$has_ev) & agents$has_ev
+  need <- which(owner & !is.na(agents$ev_kwhp100km) & is.na(agents$ev_kwh))
+  if (length(need) > 0) agents$ev_kwh[need] <- ev_annual_kwh(agents$km[need], agents$ev_kwhp100km[need])
+  agents$ev_kwh[!owner] <- NA_real_
+  agents
+}
+
+# ev list for get_flex2() from the ev_* columns of one agent (NULL if no EV or incomplete data).
+# Used with purrr::pmap() / do.call() on agent rows, so extra arguments are swallowed by `...`.
+#' @noRd
+ev_from_agent <- function(has_ev = FALSE, ev_kwh = NA, ev_charger_kw = NA, ev_battery_kwh = NA,
+                          ev_arr = NA, ev_dep = NA, ev_wkend_home = FALSE, ev_eta = 0.9, ...) {
+  if (is.null(has_ev) || length(has_ev) != 1 || is.na(has_ev) || !has_ev) return(NULL)
+  if (anyNA(c(ev_kwh, ev_charger_kw, ev_battery_kwh, ev_arr, ev_dep))) return(NULL)
+  list(kwh = ev_kwh, charger_kw = ev_charger_kw, battery_kwh = ev_battery_kwh,
+       arr = ev_arr, dep = ev_dep,
+       wkend_home = isTRUE(ev_wkend_home),
+       eta = if (is.na(ev_eta)) 0.9 else ev_eta)
+}
+
+# EV charging on arrival (no price response) for the hourly frame df (datetime, load): what an EV owner
+# does on a flat tariff, and the "noflex" counterfactual on tou/dynamic plans. Limited by the household
+# import limit.
+#' @noRd
+ev_charge_noflex <- function(df, ev, block_hours = 168) {
+  P_max <- sD %>% dplyr::filter(parameter == "mic") %>% dplyr::pull(value)
+  n <- nrow(df)
+  eta <- if (is.null(ev$eta)) 0.9 else ev$eta
+  wkend <- if (is.null(ev$wkend_home)) FALSE else ev$wkend_home
+  e0_frac <- if (is.null(ev$e0_frac)) 0.8 else ev$e0_frac
+  block <- ev_blocks(n, block_hours)
+  home <- ev_home_hours(df$datetime, ev$arr, ev$dep, wkend)
+  u <- ev_drive_energy(home, ev$kwh, eta, block)
+  ev_charge_uncontrolled(home, u, ev$charger_kw, eta, e0_frac * ev$battery_kwh,
+                         q_cap = pmax(P_max - df$load, 0), block = block)
+}
+
+# One household, one plan, one year: the hourly frame with the optimal response and the EV charging with and
+# without price response. df has columns datetime, price, load (non-EV natural load).
+# Returns df plus load_opt (optimised non-EV load), x (non-EV shift), ev_noflex (charge on arrival) and
+# ev_flex (EV charging under the plan: optimised for tou/dynamic, = ev_noflex on flat).
+# ev = NULL gives exactly the pre-EV behaviour (get_flex() for tou/dynamic, no shifting on flat).
+#' @noRd
+ev_household_profile <- function(df, ev = NULL, flat = FALSE, phi, gamma, eta, tau, kernel = "exp") {
+  df <- df %>% dplyr::arrange(datetime)
+  if (flat) {
+    df$x <- 0
+    df$load_opt <- df$load
+  } else {
+    df <- if (is.null(ev)) get_flex(df, phi, gamma, eta, tau, kernel) else get_flex2(df, ev, phi, gamma, eta, tau, kernel)
+  }
+  if (is.null(ev)) {
+    df$ev_noflex <- 0
+    df$ev_flex <- 0
+  } else {
+    df$ev_noflex <- ev_charge_noflex(df, ev)
+    df$ev_flex <- if (flat) df$ev_noflex else df$ev_charge
+  }
+  df
+}
+
+
 
 # get_flex2: household load-shifting with a fully flexible EV in one QP
 # Licensed under the Apache License, Version 2.0
@@ -354,6 +437,7 @@ get_capped_profiles <- function(year, agents, prices_scen, d_max_per_hh,
 
   # --- EV attributes ---------------------------------------------------------------------------
   is_ev <- rep(FALSE, n)
+  if ("has_ev" %in% names(agents)) agents$ev <- agents$has_ev   # ABM output column name
   if ("ev" %in% names(agents)) {
     need <- c("ev_kwh", "ev_charger_kw", "ev_battery_kwh", "ev_arr", "ev_dep", "ev_wkend_home")
     stopifnot(all(need %in% names(agents)))
@@ -533,7 +617,7 @@ draw_ev_attributes <- function(n) {
   data.frame(
     ev_kwhp100km         = rnorm(n,15,1),     #mean is 15
     ev_charger_kw  = 7,
-      #sample(c(3.7, 7, 11), n, replace = TRUE, prob = c(0.2, 0.7, 0.1)),
+    #sample(c(3.7, 7, 11), n, replace = TRUE, prob = c(0.2, 0.7, 0.1)),
     ev_battery_kwh = sample(c(40, 60, 80), n, replace = TRUE, prob = c(0.3, 0.5, 0.2)),
     ev_arr         = pmin(23, pmax(15, round(stats::rnorm(n, 18, 1.5)))),
     ev_dep         = pmax(5, pmin(10, round(stats::rnorm(n, 7.5, 1)))),

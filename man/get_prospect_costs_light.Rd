@@ -15,7 +15,8 @@ get_prospect_costs_light(
   smart_rollout,
   dyn_aware,
   prices_scen,
-  params
+  params,
+  ev = NULL
 )
 }
 \arguments{
@@ -40,6 +41,8 @@ get_prospect_costs_light(
 \item{prices_scen}{price scenario}
 
 \item{params}{scenario parameters at yeartime}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})}
 }
 \value{
 a list with two elements: \code{costs} (a single-row tibble: flat, tou_noflex, tou_flex,

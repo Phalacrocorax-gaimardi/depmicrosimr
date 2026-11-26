@@ -14,7 +14,8 @@ runABM(
   use_parallel = T,
   ignore_social = F,
   shock = FALSE,
-  quiet = TRUE
+  quiet = TRUE,
+  include_evs = TRUE
 )
 }
 \arguments{
@@ -37,6 +38,8 @@ runABM(
 \item{shock}{if TRUE a 2030 x4 shock is included}
 
 \item{quiet}{if TRUE messaging is reduced}
+
+\item{include_evs}{if FALSE the model is run with no EVs (the pre-EV model), for comparison. Default TRUE.}
 }
 \value{
 a four component list - simulation output, scenario setup, meta-parameters, seeds for set_prices()

@@ -4,7 +4,14 @@
 \alias{initialise_agents}
 \title{initialise_agents}
 \usage{
-initialise_agents(scen, start_year = 2019, prices_scen, social_network)
+initialise_agents(
+  scen,
+  start_year = 2019,
+  prices_scen,
+  social_network,
+  ev_share_end = 0.5,
+  include_evs = TRUE
+)
 }
 \arguments{
 \item{scen}{scenario design dataframe e.g. sD}
@@ -14,9 +21,14 @@ initialise_agents(scen, start_year = 2019, prices_scen, social_network)
 \item{prices_scen}{tariff prices dataframe}
 
 \item{social_network}{social network}
+
+\item{ev_share_end}{share of car-owning households with an EV at the end of the Bass curve (2041), default 0.5}
+
+\item{include_evs}{if FALSE no household has an EV (and none adopt): the pre-EV model, for comparison. Default TRUE.}
 }
 \value{
-a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
+a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters,
+and EV columns (\code{has_car}, \code{has_ev}, \code{ev_year}, \code{ev_kwh}, ...). The EV adoption parameters are stored in \code{attr(, "bass_params")}.
 }
 \description{
 \code{initialise_agents()} sets the initial state variables at the beginning of each run (Jan 2019 before smart-meter rollout)\cr

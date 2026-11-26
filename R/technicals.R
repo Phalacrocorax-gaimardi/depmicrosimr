@@ -270,13 +270,13 @@ standing_charge_fun <- function(scen,yeartime,tariff_plan){
   stopifnot(tariff_plan %in% c("flat","tou","dynamic"))
   #
   if(tariff_plan !="dynamic"){
-  values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
-  res <- approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y
+    values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2015","standing_charge_2022","standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
+    res <- approx(x=c(2015.5,2022.5,2025.5,2030.5,2040.5), y=values,xout=yeartime,rule=2)$y
   } else {
     premia <- scen %>% dplyr::filter(parameter %in% c("dep_standing_charge_premium_2026","dep_standing_charge_premium_2030","dep_standing_charge_premium_2040")) %>% dplyr::pull(value) #add more costs here if known
     values <- scen %>% dplyr::filter(parameter %in% c("standing_charge_2025","standing_charge_2030","standing_charge_2040")) %>% dplyr::pull(value) #add more costs here if known
     res <- approx(x=c(2026.5,2030.5,2040.5), y=values+premia,xout=yeartime,rule=2)$y
-     }
+  }
   return(res)
 
 }
@@ -315,11 +315,11 @@ decompose_logprices <- function(price_data){
   #scale <- sd(hourly$price)/2
   hourly$logprice <- asinh(hourly$price/scale0)
   dcmp <- hourly %>% fabletools::model(feasts::STL(logprice ~ trend(window = 2001)
-                                           # + season(period = "1 day",window=30*24+1)
-                                           + season(period = "1 day",window="periodic")
-                                           + season(period = "1 week",window="periodic")
-                                           + season(period=8766,window="periodic")
-                                           ,robust=TRUE)) %>% fabletools::components()
+                                                   # + season(period = "1 day",window=30*24+1)
+                                                   + season(period = "1 day",window="periodic")
+                                                   + season(period = "1 week",window="periodic")
+                                                   + season(period=8766,window="periodic")
+                                                   ,robust=TRUE)) %>% fabletools::components()
   dcmp <- dcmp %>% dplyr::rename("season_week"=`season_1 week`) %>% dplyr::rename("season_year"=season_8766) %>% dplyr::rename("season_day"=`season_1 day`)
   dcmp <- dcmp %>% dplyr::select(-season_adjust,-.model)
   #smoothing of annual seasonal components, adding new residuals to existing residual
@@ -698,15 +698,17 @@ sem_trend_price <- function(scen,yeartime){
 #' @param tau loadshift horizon
 #' @param natural_profile natural profile
 #' @param prices_scen price scenario
+#' @param ev NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})
 #'
-#' @returns data frame
+#' @returns data frame with datetime, price, natural_load, optimised_load (both non-EV), ev_natural_load (EV charging on arrival),
+#'   ev_load (EV charging under the tariff plan; optimised for tou/dynamic) and total_load = optimised_load + ev_load
 #' @export
 #'
 #' @examples
 #' #prices_scen <- set_prices(sD)
 #' #get_profile(2040,3000,"dynamic",phi=0.4,gamma=5,eta=0.3,tau=48,"LP1",prices_scen)
 #'
-get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=48, natural_profile="LP1",prices_scen) {
+get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=48, natural_profile="LP1",prices_scen,ev=NULL) {
   #
   stopifnot(tariff_plan %in% c("flat","tou","tou_old","dynamic"))
   profile <- tolower(natural_profile)
@@ -728,14 +730,12 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
   #Scale parameter by the flexible load
   #gamma_scaled <- gamma * (8760 / kWh)
   #eta_scaled   <- eta * (8760 / kWh)
-  if (tariff_plan != "flat"){
-    df <- get_flex(df, phi, gamma, eta, tau)
-    df <- df |> dplyr::select(datetime,price,load,load_opt) |> dplyr::rename("natural_load"=load,"optimised_load"=load_opt)}
-  else{
-
-    df$optimised_load <- df$load
-    df <- df %>% dplyr::rename("natural_load"=load)
-  }
+  df <- ev_household_profile(df, ev, flat = (tariff_plan == "flat"), phi, gamma, eta, tau)
+  df <- df |>
+    dplyr::select(datetime, price, load, load_opt, ev_noflex, ev_flex) |>
+    dplyr::rename("natural_load" = load, "optimised_load" = load_opt,
+                  "ev_natural_load" = ev_noflex, "ev_load" = ev_flex) |>
+    dplyr::mutate(total_load = optimised_load + ev_load)
   # 6. Return the final dataframe cleanly (No pipes on the return statement!)
   return(df)
 }
@@ -753,75 +753,65 @@ get_profile <- function(year, kWh, tariff_plan, phi=0.4, gamma=5, eta=0.3, tau=4
 #' @param use_parallel use parallel
 #' @param n_cores usually parallel::detectCores() - 2 or similar
 #'
-#' @returns a dataframe with aggregate profile components by tariff
+#' @returns a dataframe with aggregate profile components by tariff: \code{natural_load} and \code{optimised_load} (non-EV),
+#'   \code{ev_natural_load} (EVs charging on arrival), \code{ev_load} (EV charging under each household's plan) and \code{total_load}
 #' @export
 #'
 #' @examples
 #'
 get_aggregate_profile <- function(year, abm, prices_scen, use_parallel = TRUE, n_cores = parallel::detectCores() - 1) {
 
+  ev_cols <- c("has_ev", "ev_kwh", "ev_charger_kw", "ev_battery_kwh", "ev_arr", "ev_dep", "ev_wkend_home", "ev_eta")
+
   #filter abm output for target year
   abm_y <- abm %>%
     dplyr::filter(date == lubridate::ymd(paste(year, "01", "01", sep = "-"))) %>%
-    dplyr::select(simulation, date, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile)
+    dplyr::select(simulation, date, kWh, tariff_plan, phi, gamma, eta, tau, natural_profile, dplyr::any_of(ev_cols))
 
   abm_y$year <- year
-  #abm_y <- abm_y[1:10,]
-  # worker function
-  worker <- function(kWh, tariff_plan, phi, gamma, eta, tau, natural_profile) {
+  #the EV of each household (NULL for households without one, or for abm output with no EV columns)
+  ev_present <- intersect(ev_cols, names(abm_y))
+  ev_list <- lapply(seq_len(nrow(abm_y)), function(i) {
+    if (!("has_ev" %in% ev_present)) return(NULL)
+    do.call(ev_from_agent, as.list(abm_y[i, ev_present]))
+  })
+
+  # worker function, one household
+  worker <- function(i) {
     df <- get_profile(
       year            = year,
-      kWh             = kWh,
-      tariff_plan     = tariff_plan,
-      phi             = phi,
-      gamma           = gamma,
-      eta             = eta,
-      tau             = tau,
-      natural_profile = natural_profile,
-      prices_scen     = prices_scen
+      kWh             = abm_y$kWh[i],
+      tariff_plan     = abm_y$tariff_plan[i],
+      phi             = abm_y$phi[i],
+      gamma           = abm_y$gamma[i],
+      eta             = abm_y$eta[i],
+      tau             = abm_y$tau[i],
+      natural_profile = abm_y$natural_profile[i],
+      prices_scen     = prices_scen,
+      ev              = ev_list[[i]]
     )
-    df$tariff_plan <- tariff_plan
+    df$tariff_plan <- abm_y$tariff_plan[i]
     return(df)
   }
 
   # parallel or not
+  idx <- seq_len(nrow(abm_y))
   if (use_parallel) {
-    #
-    profile_list <- parallel::mcmapply(
-      FUN             = worker,
-      kWh             = abm_y$kWh,
-      tariff_plan     = abm_y$tariff_plan,
-      phi             = abm_y$phi,
-      gamma           = abm_y$gamma,
-      eta             = abm_y$eta,
-      tau             = abm_y$tau,
-      natural_profile = abm_y$natural_profile,
-      SIMPLIFY        = FALSE,
-      mc.cores        = n_cores,
-      mc.preschedule  = FALSE
-    )
+    profile_list <- parallel::mclapply(idx, worker, mc.cores = n_cores, mc.preschedule = FALSE)
   } else {
-
-    profile_list <- mapply(
-      FUN             = worker,
-      kWh             = abm_y$kWh,
-      tariff_plan     = abm_y$tariff_plan,
-      phi             = abm_y$phi,
-      gamma           = abm_y$gamma,
-      eta             = abm_y$eta,
-      tau             = abm_y$tau,
-      natural_profile = abm_y$natural_profile,
-      SIMPLIFY        = FALSE # Fixed trailing comma error here
-    )
+    profile_list <- lapply(idx, worker)
   }
 
   #bind and aggregate
   res <- dplyr::bind_rows(profile_list) %>%
     dplyr::group_by(datetime, tariff_plan) %>%
     dplyr::summarise(
-      natural_load   = sum(natural_load, na.rm = TRUE),
-      optimised_load = sum(optimised_load, na.rm = TRUE),
-      .groups        = "drop"
+      natural_load     = sum(natural_load, na.rm = TRUE),
+      optimised_load   = sum(optimised_load, na.rm = TRUE),
+      ev_natural_load  = sum(ev_natural_load, na.rm = TRUE),
+      ev_load          = sum(ev_load, na.rm = TRUE),
+      total_load       = sum(total_load, na.rm = TRUE),
+      .groups          = "drop"
     )
   res$year <- year
   return(res)

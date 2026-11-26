@@ -13,7 +13,8 @@ update_agents(
   ignore_social = FALSE,
   behavioural_model = "full",
   ignore_theta = TRUE,
-  quiet = TRUE
+  quiet = TRUE,
+  bass_params = NULL
 )
 }
 \arguments{
@@ -34,6 +35,11 @@ update_agents(
 \item{ignore_theta}{defaults to TRUE}
 
 \item{quiet}{TRUE to suppress messages}
+
+\item{bass_params}{EV adoption parameters from \code{bass_ev_params()} (\code{attr(agents, "bass_params")} after \code{initialise_agents()}).
+If given, EV ownership is updated at the start of the step with \code{update_ev_adoption()} and EV households evaluate tariffs with
+\code{get_flex2()}. Households that acquire an EV in the step always review their tariff plan, in addition to the random sample.
+If NULL, ownership is frozen.}
 }
 \value{
 updated agent dataframe

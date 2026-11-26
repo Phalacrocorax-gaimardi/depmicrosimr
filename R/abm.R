@@ -33,15 +33,18 @@
 #' @param start_year default 2019
 #' @param prices_scen tariff prices dataframe
 #' @param social_network social network
+#' @param ev_share_end share of car-owning households with an EV at the end of the Bass curve (2041), default 0.5
+#' @param include_evs if FALSE no household has an EV (and none adopt): the pre-EV model, for comparison. Default TRUE.
 #'
 #'
-#' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters
+#' @returns a dataframe with columns serial ID, annual kWh, initial tariff plan, smart meter install time, and behavioural parameters,
+#'   and EV columns (\code{has_car}, \code{has_ev}, \code{ev_year}, \code{ev_kwh}, ...). The EV adoption parameters are stored in \code{attr(, "bass_params")}.
 #' @export
 #' @examples
 #' prices_scen <- set_prices(sD)
 #' social_network <- make_artificial_society(dep_society_1,homophily,nu=4.5)
 #' agents <- initialise_agents(sD,2019,prices_scen,social_network)
-initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
+initialise_agents <- function(scen, start_year=2019,prices_scen,social_network,ev_share_end=0.5,include_evs=TRUE){
 
   eta <- scen %>% dplyr::filter(parameter=="eta.") %>% dplyr::pull(value)
   phi <- scen %>% dplyr::filter(parameter=="phi.") %>% dplyr::pull(value)
@@ -118,7 +121,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 
   #assign natural profile codes : currently only an urban/rural profile
   agents_in <- agents_in %>% dplyr::mutate(natural_profile=dplyr::case_when(area=="Urban"~"lp1",
-                                                                    area=="Rural"~"lp3"))
+                                                                            area=="Rural"~"lp3"))
   #actual profile
   agents_in <- agents_in %>% dplyr::mutate(profile=dplyr::case_when(area=="Urban"&tariff_plan=="flat"~"lp1",
                                                                     area=="Urban"&tariff_plan=="tou_old"~"lp2",
@@ -173,14 +176,23 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
   ev_surv$serial <- as.character(ev_surv$serial)
   agents_in <- agents_in %>% dplyr::left_join(ev_surv,by="serial")
   agents_in <- agents_in %>% dplyr::mutate(has_car = ifelse(is.na(has_car), FALSE, has_car), has_ev = ifelse(is.na(has_ev), FALSE, has_ev))
-  #hard-wired 50% adoption at end of 2040
-  bass_params <- bass_ev_params(share_end = 0.5, share_start = mean(agents_in$has_ev[agents_in$has_car]))
-  agents_in <- update_ev_adoption(agents_in, start_year, bass_params = bass_params)      # first call: backcast to 2019
-  #add heterogeneous annual energy use ev_kWh
-  agents_in <- agents_in %>% dplyr::mutate(ev_kwh=km*ev_kwhp100km)
+  #share of car-owning households with an EV: ev_share_end (default 50%) at the end year of bass_ev_params() (2041),
+  #3.9% observed in 2025 (share_start is calibrated to the observed share, before the backcast)
+  if (include_evs) {
+    bass_params <- bass_ev_params(share_end = ev_share_end, share_start = mean(agents_in$has_ev[agents_in$has_car]))
+    agents_in <- update_ev_adoption(agents_in, start_year, bass_params = bass_params)      # first call: backcast to start_year
+    #annual EV grid energy (kWh) from daily km and kWh/100km. Households that adopt later get it in update_agents()
+    agents_in <- add_ev_kwh(agents_in)
+  } else {
+    #no EVs: has_ev is FALSE for everyone and bass_params is NULL, so update_agents() never adds one
+    bass_params <- NULL
+    agents_in$has_ev <- FALSE
+  }
 
-  agents_in %>% dplyr::select(-flex_score_0,-tou_adopter) %>% return()
-  #agents_in %>% return()
+  agents_in <- agents_in %>% dplyr::select(-flex_score_0,-tou_adopter)
+  #carried to update_agents() by runABM() (attributes do not survive most dplyr verbs, so set it last)
+  attr(agents_in, "bass_params") <- bass_params
+  return(agents_in)
 }
 
 #' update_agents
@@ -201,6 +213,10 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 #' @param behavioural_model "prospect" (default) or "classic" or "full"
 #' @param ignore_theta defaults to TRUE
 #' @param quiet TRUE to suppress messages
+#' @param bass_params EV adoption parameters from \code{bass_ev_params()} (\code{attr(agents, "bass_params")} after \code{initialise_agents()}).
+#'   If given, EV ownership is updated at the start of the step with \code{update_ev_adoption()} and EV households evaluate tariffs with
+#'   \code{get_flex2()}. Households that acquire an EV in the step always review their tariff plan, in addition to the random sample.
+#'   If NULL, ownership is frozen.
 #'
 #' @return updated agent dataframe
 #' @export
@@ -212,7 +228,7 @@ initialise_agents <- function(scen, start_year=2019,prices_scen,social_network){
 #'
 #' #agents_1 <- update_agents(sD,2030,agents_in,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
 #' #agents_2 <- update_agents(sD,2030,agents_1,prices_scen,social_network,behavioural_model="full",quiet=FALSE)
-update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network, ignore_social = FALSE, behavioural_model = "full", ignore_theta = TRUE, quiet = TRUE) {
+update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network, ignore_social = FALSE, behavioural_model = "full", ignore_theta = TRUE, quiet = TRUE, bass_params = NULL) {
 
   stopifnot(behavioural_model %in% c("prospect", "classic", "full", "test"))
   params <- scenario_params(scen, yeartime)
@@ -221,6 +237,16 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
   c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
   foresight <- scen  |> dplyr::filter(parameter == "foresight") |> dplyr::pull(value) |> as.logical()
   stopifnot(is.logical(foresight) & !is.na(foresight))
+
+  #EV adoption (Bass) at the start of the step, so that this step's tariff decisions see the new EV owners
+  new_ev_serials <- character(0)
+  if (!is.null(bass_params) && "has_ev" %in% names(agents_in)) {
+    had_ev <- !is.na(agents_in$has_ev) & agents_in$has_ev
+    agents_in <- update_ev_adoption(agents_in, yeartime, dt = 1/6, bass_params = bass_params)
+    agents_in <- add_ev_kwh(agents_in)
+    #households that acquire an EV this step
+    new_ev_serials <- agents_in$serial[!had_ev & !is.na(agents_in$has_ev) & agents_in$has_ev]
+  }
 
   a_s <- agents_in
   n_tou <- dim(a_s %>% dplyr::filter(tariff_plan == "tou" | tariff_plan == "tou_old"))[1]
@@ -241,10 +267,15 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   # Sample potential switchers
   b_s <- dplyr::slice_sample(a_s, n = roundr(dim(a_s)[1] * params$p.))
+  #buying an EV triggers a tariff review: new EV owners are always added to the households reviewing their plan
+  b_s <- dplyr::bind_rows(b_s, dplyr::filter(a_s, serial %in% setdiff(new_ev_serials, b_s$serial)))
   b_s$current_plan <- b_s$tariff_plan
 
-  tariff_plan_bills_env <- function(kWh, phi, gamma, eta, tau, natural_profile, rollout, ...) {
-    tariff_plan_bills(kWh, phi, gamma, eta, tau, natural_profile, rollout, prices_scen, params)
+  tariff_plan_bills_env <- function(kWh, phi, gamma, eta, tau, natural_profile, rollout, has_ev = FALSE, ev_kwh = NA,
+                                    ev_charger_kw = NA, ev_battery_kwh = NA, ev_arr = NA, ev_dep = NA,
+                                    ev_wkend_home = FALSE, ev_eta = 0.9, ...) {
+    ev <- ev_from_agent(has_ev, ev_kwh, ev_charger_kw, ev_battery_kwh, ev_arr, ev_dep, ev_wkend_home, ev_eta)
+    tariff_plan_bills(kWh, phi, gamma, eta, tau, natural_profile, rollout, prices_scen, params, ev)
   }
 
   if (behavioural_model == "classic") {
@@ -289,7 +320,10 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   } else if (behavioural_model == "prospect") {
 
-    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout,dyn_aware, current_plan, degree, q_tou, q_dyn, ...) {
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout,dyn_aware, current_plan, degree, q_tou, q_dyn,
+                             has_ev = FALSE, ev_kwh = NA, ev_charger_kw = NA, ev_battery_kwh = NA, ev_arr = NA, ev_dep = NA,
+                             ev_wkend_home = FALSE, ev_eta = 0.9, ...) {
+      ev <- ev_from_agent(has_ev, ev_kwh, ev_charger_kw, ev_battery_kwh, ev_arr, ev_dep, ev_wkend_home, ev_eta)
       #c_tou <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou") |> dplyr::pull(value)
       #c_det <- scen |> dplyr::filter(parameter == "pt_certainty_flex_det") |> dplyr::pull(value)
       #c_tou_max <- scen |> dplyr::filter(parameter == "pt_certainty_flex_tou_max") |> dplyr::pull(value)
@@ -299,7 +333,7 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
       #the socially influenced c_det_soc never exceeds c_you
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
-      result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params)
+      result <- evaluate_tariffs(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen, params, ev)
 
       new_plan <- result$decision
       new_bill <- switch(new_plan,
@@ -323,12 +357,15 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 
   } else if (behavioural_model == "full") {
 
-    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, dyn_aware,current_plan, degree, q_tou, q_dyn, ...) {
+    evaluate_one <- function(kWh, phi, gamma, eta, tau, lambda, natural_profile, rollout, dyn_aware,current_plan, degree, q_tou, q_dyn,
+                             has_ev = FALSE, ev_kwh = NA, ev_charger_kw = NA, ev_battery_kwh = NA, ev_arr = NA, ev_dep = NA,
+                             ev_wkend_home = FALSE, ev_eta = 0.9, ...) {
+      ev <- ev_from_agent(has_ev, ev_kwh, ev_charger_kw, ev_battery_kwh, ev_arr, ev_dep, ev_wkend_home, ev_eta)
 
       c_tou_soc <- c_tou + ifelse(degree == 0, 0, min(1, (q_tou + q_dyn) / degree)) * max(0, c_tou_max - c_tou)
       c_det_soc <- c_det + ifelse(degree == 0, 0, min(1, q_dyn / degree)) * max(0, c_tou - c_det)
 
-      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen,foresight, params)
+      result <- evaluate_full_cost(scen, kWh, phi, gamma, eta, tau, natural_profile, rollout,dyn_aware, c_tou_soc, c_det_soc, lambda, prices_scen,foresight, params, ev)
 
       new_plan <- result$decision
       new_bill <- switch(new_plan,
@@ -421,13 +458,14 @@ update_agents <- function(scen, yeartime, agents_in, prices_scen, social_network
 #' @param behavioural_model choose "classic" or "prospect" (default) or "full"
 #' @param shock if TRUE a 2030 x4 shock is included
 #' @param quiet if TRUE messaging is reduced
+#' @param include_evs if FALSE the model is run with no EVs (the pre-EV model), for comparison. Default TRUE.
 #'
 #' @return a four component list - simulation output, scenario setup, meta-parameters, seeds for set_prices()
 #' @export
 #' @importFrom magrittr %>%
 #' @importFrom lubridate %m+%
 #'
-runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE,quiet=TRUE){
+runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behavioural_model="full",n_unused_cores=2, use_parallel=T,ignore_social=F, shock=FALSE,quiet=TRUE,include_evs=TRUE){
   #
   year_zero <- 2019
   #calibration params:: MOVED TO SYSTDATA WHEN CALIBRATION COMPLETE
@@ -447,7 +485,7 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
   run_seeds <- sample.int(.Machine$integer.max, Nrun)
   foresight <- scen  |> dplyr::filter(parameter == "foresight") |> dplyr::pull(value) |> as.logical()
   #single worker (abm run idex j)
-  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,shock,w,quiet){
+  run_single <- function(j,scen,year_zero,Nt,resample_society,ignore_social,behavioural_model,shock,w,quiet,include_evs){
 
     print(paste("Generating price simulation for run",j,"...."))
     prices_scen <- set_prices(scen,cru_cap = TRUE,shock=shock)
@@ -465,17 +503,18 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
       social <- make_artificial_society(society_new,homophily,4.5)
     }
     print(paste("initialising agents.."))
-    agents_in <- initialise_agents(scen,year_zero,prices_scen,social)
+    agents_in <- initialise_agents(scen,year_zero,prices_scen,social,include_evs=include_evs)
     #no transactions
     #agents_in$transaction <- FALSE
     agent_ts <- vector("list",Nt)
     agent_ts[[1]] <- agents_in #agent parameters with regularized weights
+    bass_params <- attr(agents_in, "bass_params")   #EV adoption parameters set by initialise_agents()
 
     for(t in seq(2,Nt)){
       #
       #yeartime <- year_zero+(t-1)
       yeartime <- year_zero+(t-1)/6
-      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social=ignore_social,behavioural_model=behavioural_model,quiet=quiet) #static socal network, everything else static
+      agent_ts[[t]] <- update_agents(scen,yeartime,agent_ts[[t-1]],prices_scen, social_network=social,ignore_social=ignore_social,behavioural_model=behavioural_model,quiet=quiet,bass_params=bass_params) #static socal network, everything else static
       #agent_ts[[t]] <- tibble::tibble(t=t)
     }
 
@@ -488,61 +527,64 @@ runABM <- function(scen, Nrun=1,simulation_end=2030,resample_society=F,behaviour
 
   if(use_parallel & .Platform$OS.type == "windows"){
 
-      number_of_cores <- parallel::detectCores() - n_unused_cores
-      cl <- parallel::makeCluster(number_of_cores)
-      on.exit(parallel::stopCluster(cl), add = TRUE)
-      #exports
-      parallel::clusterEvalQ(cl, library(depmicrosimr))
-      abm <- parallel::parLapply(cl, 1:Nrun, run_single,scen = scen,
-                                 year_zero = year_zero,
-                                 Nt = Nt,
-                                 resample_society = resample_society,
-                                 behavioural_model=behavioural_model,
-                                 ignore_social = ignore_social,
-                                 shock=shock,
-                                 w=w,
-                                 quiet = quiet)
-      parallel::stopCluster(cl)
-    }
-  #should run seamlessly on linux or Mac
-    if(use_parallel & .Platform$OS.type != "windows"){
-      number_of_cores <- parallel::detectCores() - n_unused_cores
-      abm <- parallel::mclapply(1:Nrun, run_single,scen = scen,
-                                year_zero = year_zero,
-                                Nt = Nt,
-                                resample_society = resample_society,
-                                ignore_social = ignore_social,
-                                quiet = quiet,
-                                behavioural_model=behavioural_model,
-                                shock=shock,
-                                w=w,
-                                mc.cores=number_of_cores,
-                                mc.preschedule = FALSE)
-    }
-
-
-    #don't use parallel
-    if(!use_parallel) abm <- lapply(1:Nrun,run_single,scen = scen,
-                                    year_zero = year_zero,
-                                    Nt = Nt,
-                                    resample_society = resample_society,
-                                    ignore_social = ignore_social,
-                                    behavioural_model=behavioural_model,
-                                    shock=shock,
-                                    w=w,
-                                    quiet = quiet)
-
-
-    #closeAllConnections()
-    #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
-    w <- scen %>% dplyr::filter(parameter=="w.") %>% dplyr::pull(value)
-    eta <- scen %>% dplyr::filter(parameter=="eta.") %>% dplyr::pull(value)
-    phi <- scen %>% dplyr::filter(parameter=="phi.") %>% dplyr::pull(value)
-    meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det","foresight","phi","eta"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det,foresight,phi,eta))
-    #replace "t" with dates
-    abm <- abm %>% purrr::list_rbind()
-    abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
-    return(list("abm"=abm,"scenario"=scen,"system"=meta,"seeds"=run_seeds))
+    number_of_cores <- parallel::detectCores() - n_unused_cores
+    cl <- parallel::makeCluster(number_of_cores)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    #exports
+    parallel::clusterEvalQ(cl, library(depmicrosimr))
+    abm <- parallel::parLapply(cl, 1:Nrun, run_single,scen = scen,
+                               year_zero = year_zero,
+                               Nt = Nt,
+                               resample_society = resample_society,
+                               behavioural_model=behavioural_model,
+                               ignore_social = ignore_social,
+                               shock=shock,
+                               w=w,
+                               quiet = quiet,
+                               include_evs = include_evs)
+    parallel::stopCluster(cl)
   }
+  #should run seamlessly on linux or Mac
+  if(use_parallel & .Platform$OS.type != "windows"){
+    number_of_cores <- parallel::detectCores() - n_unused_cores
+    abm <- parallel::mclapply(1:Nrun, run_single,scen = scen,
+                              year_zero = year_zero,
+                              Nt = Nt,
+                              resample_society = resample_society,
+                              ignore_social = ignore_social,
+                              quiet = quiet,
+                              behavioural_model=behavioural_model,
+                              shock=shock,
+                              w=w,
+                              include_evs = include_evs,
+                              mc.cores=number_of_cores,
+                              mc.preschedule = FALSE)
+  }
+
+
+  #don't use parallel
+  if(!use_parallel) abm <- lapply(1:Nrun,run_single,scen = scen,
+                                  year_zero = year_zero,
+                                  Nt = Nt,
+                                  resample_society = resample_society,
+                                  ignore_social = ignore_social,
+                                  behavioural_model=behavioural_model,
+                                  shock=shock,
+                                  w=w,
+                                  quiet = quiet,
+                                  include_evs = include_evs)
+
+
+  #closeAllConnections()
+  #meta <- tibble::tibble(parameter=c("Nrun","end_year","beta.","lambda.","p."),value=c(Nrun,simulation_end,beta,lambda,p))
+  w <- scen %>% dplyr::filter(parameter=="w.") %>% dplyr::pull(value)
+  eta <- scen %>% dplyr::filter(parameter=="eta.") %>% dplyr::pull(value)
+  phi <- scen %>% dplyr::filter(parameter=="phi.") %>% dplyr::pull(value)
+  meta <- tibble::tibble(parameter=c("Nrun","end_year","p.","model","shock","w.","c_tou","c_det","foresight","phi","eta"),value=c(Nrun,simulation_end,p.,behavioural_model,shock,w,c_tou,c_det,foresight,phi,eta))
+  #replace "t" with dates
+  abm <- abm %>% purrr::list_rbind()
+  abm <- abm %>% dplyr::mutate(date=lubridate::ymd(paste(year_zero,"-01-01",sep="")) %m+% months((t-1)*2)) %>% dplyr::arrange(simulation,date) %>% dplyr::select(-t)
+  return(list("abm"=abm,"scenario"=scen,"system"=meta,"seeds"=run_seeds))
+}
 
 

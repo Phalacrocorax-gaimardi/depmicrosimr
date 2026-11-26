@@ -13,7 +13,8 @@ tariff_plan_bills(
   natural_profile = "LP1",
   smart_rollout,
   prices_scen,
-  params
+  params,
+  ev = NULL
 )
 }
 \arguments{
@@ -34,6 +35,8 @@ tariff_plan_bills(
 \item{prices_scen}{price scenario}
 
 \item{params}{scenario parameters at params$yeartime}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()})}
 }
 \value{
 dataframe

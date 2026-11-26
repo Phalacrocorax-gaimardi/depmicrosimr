@@ -14,7 +14,8 @@ get_full_annual_cost(
   natural_profile = "LP1",
   prices_scen,
   foresight = FALSE,
-  params
+  params,
+  ev = NULL
 )
 }
 \arguments{
@@ -37,6 +38,8 @@ get_full_annual_cost(
 \item{foresight}{if FALSE then agent assesses last year's prices for tariff decision. If TRUE perfect foresight over one year is assumed.}
 
 \item{params}{parameters at yeartime}
+
+\item{ev}{NULL (no EV, default) or a list describing the household's EV (see \code{get_flex2()}); the EV bill is included in the annual bills}
 }
 \value{
 dataframe with cost breakdown
